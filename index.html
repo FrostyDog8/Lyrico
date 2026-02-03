@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyrics Figure - Guess the Song!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="dev-mode-row">
+            <button id="devModeBtn" class="btn btn-dev-mode" title="Toggle Developer Mode">🔧</button>
+            <span id="preloadCounter" class="preload-counter" style="display: none;" title="Preloaded surprise songs ready">Songs ready: <strong id="preloadCount">0</strong> / 3</span>
+        </div>
+        <header>
+            <h1>🎵 Lyrics Figure</h1>
+            <p class="subtitle">Guess the song by filling in the lyrics!</p>
+        </header>
+
+        <div class="game-setup" id="gameSetup">
+            <div class="input-group">
+                <label for="songInput">Enter song name:</label>
+                <input type="text" id="songInput" placeholder="e.g., Bohemian Rhapsody">
+                <button id="startBtn" class="btn btn-primary">Start Game</button>
+                <div class="divider">or</div>
+                <button id="surpriseBtn" class="btn btn-secondary">🎲 Surprise Me!</button>
+            </div>
+            <div id="errorMessage" class="error-message"></div>
+            <div id="failedSongs" class="failed-songs" style="display: none;">
+                <h4>Failed Songs (for testing):</h4>
+                <div id="failedSongsList"></div>
+            </div>
+            <div id="songSelection" class="song-selection" style="display: none;">
+                <h3>Multiple songs found. Please select one:</h3>
+                <div id="songList" class="song-list"></div>
+                <button id="cancelSelectionBtn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <div class="game-area" id="gameArea" style="display: none;">
+            <div class="game-area-top-bar">
+                <button id="backBtn" class="btn btn-secondary back-btn">← Back to Main</button>
+                <button id="nextSongBtn" class="btn btn-secondary next-song-btn" style="display: none;" title="Skip to next random song">Next Song →</button>
+            </div>
+            <div id="failedSongsGame" class="failed-songs" style="display: none;">
+                <h4>Failed Songs (for testing):</h4>
+                <div id="failedSongsListGame"></div>
+            </div>
+            <div class="song-info">
+                <div class="song-title-container">
+                    <h2 id="songTitle" class="hidden-title">???</h2>
+                </div>
+                <p id="songArtist" class="hidden-artist">???</p>
+                <div class="song-info-actions">
+                    <button id="revealTitleBtn" class="btn btn-reveal-song">Reveal Song</button>
+                    <a id="youtubeLink" href="https://www.youtube.com" target="_blank" class="btn btn-youtube" style="display: none;">
+                        <span>▶</span> Watch on YouTube
+                    </a>
+                </div>
+            </div>
+
+            <div class="input-section">
+                <div class="input-row">
+                    <div class="input-wrapper">
+                        <label for="wordInput">Guess a word:</label>
+                        <input type="text" id="wordInput" placeholder="Type a word..." autocomplete="off">
+                    </div>
+                    <button id="revealBtn" class="btn btn-secondary" title="Reveal all lyrics" style="display: none;">Reveal Lyrics</button>
+                </div>
+                <div class="stats">
+                    <span>Found: <span id="foundCount">0</span> / <span id="totalCount">0</span></span>
+                </div>
+            </div>
+
+            <div class="lyrics-table-container">
+                <div id="lyricsTable" class="lyrics-table"></div>
+            </div>
+
+            <div id="victoryMessage" class="victory-message" style="display: none;">
+                <h2>🎉 Congratulations! 🎉</h2>
+                <p>You've guessed the entire song!</p>
+                <button id="playAgainBtn" class="btn btn-primary">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
