@@ -7,10 +7,6 @@
     {
       "title": "Cathy's Clown",
       "artist": "Everly Brothers"
-    },
-    {
-      "title": "Running Bear",
-      "artist": "Johnny Preston"
     }
   ],
   "1961": [
@@ -23,10 +19,6 @@
       "artist": "Patsy Cline"
     },
     {
-      "title": "Michael",
-      "artist": "The Highwaymen"
-    },
-    {
       "title": "Runaround Sue",
       "artist": "Dion"
     }
@@ -37,10 +29,6 @@
       "artist": "Ray Charles"
     },
     {
-      "title": "Roses Are Red",
-      "artist": "Bobby Vinton"
-    },
-    {
       "title": "Big Girls Don't Cry",
       "artist": "The Four Seasons"
     }
@@ -49,10 +37,6 @@
     {
       "title": "Surfin' U.S.A.",
       "artist": "The Beach Boys"
-    },
-    {
-      "title": "Blue Velvet",
-      "artist": "Bobby Vinton"
     }
   ],
   "1964": [
@@ -65,19 +49,11 @@
       "artist": "The Beatles"
     },
     {
-      "title": "Hello, Dolly!",
-      "artist": "Louis Armstrong"
-    },
-    {
       "title": "Oh, Pretty Woman",
       "artist": "Roy Orbison"
     }
   ],
   "1965": [
-    {
-      "title": "Wooly Bully",
-      "artist": "Sam the Sham and the Pharaohs"
-    },
     {
       "title": "I Can't Help Myself",
       "artist": "The Four Tops"
@@ -94,10 +70,6 @@
   "1966": [
     {
       "title": "California Dreamin'",
-      "artist": "The Mamas and the Papas"
-    },
-    {
-      "title": "Monday, Monday",
       "artist": "The Mamas and the Papas"
     }
   ],
@@ -137,10 +109,6 @@
       "artist": "Paul Mauriat"
     },
     {
-      "title": "Honey",
-      "artist": "Bobby Goldsboro"
-    },
-    {
       "title": "(Sittin' On) The Dock of the Bay",
       "artist": "Otis Redding"
     },
@@ -153,26 +121,14 @@
       "artist": "Cream"
     },
     {
-      "title": "White Room",
-      "artist": "Cream"
-    },
-    {
       "title": "Mrs. Robinson",
       "artist": "Simon and Garfunkel"
     }
   ],
   "1969": [
     {
-      "title": "Sugar, Sugar",
-      "artist": "The Archies"
-    },
-    {
       "title": "Aquarius/Let the Sunshine In",
       "artist": "The 5th Dimension"
-    },
-    {
-      "title": "I Can't Get Next to You",
-      "artist": "The Temptations"
     },
     {
       "title": "Honky Tonk Women",
@@ -439,10 +395,6 @@
     {
       "title": "Rock with You",
       "artist": "Michael Jackson"
-    },
-    {
-      "title": "Lady",
-      "artist": "Kenny Rogers"
     },
     {
       "title": "It's Still Rock and Roll to Me",
@@ -727,14 +679,6 @@
     {
       "title": "How Will I Know",
       "artist": "Whitney Houston"
-    },
-    {
-      "title": "Manic Monday",
-      "artist": "The Bangles"
-    },
-    {
-      "title": "Papa Don't Preach",
-      "artist": "Madonna"
     }
   ],
   "1987": [
@@ -745,10 +689,6 @@
     {
       "title": "Alone",
       "artist": "Heart"
-    },
-    {
-      "title": "Shakedown",
-      "artist": "Bob Seger"
     },
     {
       "title": "I Wanna Dance with Somebody",
@@ -769,10 +709,6 @@
     {
       "title": "With or Without You",
       "artist": "U2"
-    },
-    {
-      "title": "La Bamba",
-      "artist": "Los Lobos"
     },
     {
       "title": "Faith",
@@ -807,18 +743,6 @@
     {
       "title": "Heaven Is a Place on Earth",
       "artist": "Belinda Carlisle"
-    },
-    {
-      "title": "Could've Been",
-      "artist": "Tiffany"
-    },
-    {
-      "title": "Hands to Heaven",
-      "artist": "Breathe"
-    },
-    {
-      "title": "Roll with It",
-      "artist": "Steve Winwood"
     }
   ],
   "1989": [
@@ -925,10 +849,6 @@
     {
       "title": "Losing My Religion",
       "artist": "R.E.M."
-    },
-    {
-      "title": "Joyride",
-      "artist": "Roxette"
     }
   ],
   "1992": [
@@ -961,16 +881,8 @@
       "artist": "Red Hot Chili Peppers"
     },
     {
-      "title": "Sometimes Love Just Ain't Enough",
-      "artist": "Patty Smyth"
-    },
-    {
       "title": "I'll Be There",
       "artist": "Mariah Carey"
-    },
-    {
-      "title": "To Be with You",
-      "artist": "Mr. Big"
     },
     {
       "title": "November Rain",
@@ -993,10 +905,6 @@
     {
       "title": "I Will Always Love You",
       "artist": "Whitney Houston"
-    },
-    {
-      "title": "That's the Way Love Goes",
-      "artist": "Janet Jackson"
     },
     {
       "title": "Can't Help Falling in Love",
@@ -1463,28 +1371,12 @@
       "artist": "Nelly Furtado"
     },
     {
-      "title": "Closer",
-      "artist": "Eden's Crush"
-    },
-    {
-      "title": "Follow Me",
-      "artist": "Uncle Kracker"
-    },
-    {
       "title": "It Wasn't Me",
       "artist": "Shaggy"
     },
     {
       "title": "Clint Eastwood",
       "artist": "Gorillaz"
-    },
-    {
-      "title": "Hit 'Em Up Style",
-      "artist": "Blu Cantrell"
-    },
-    {
-      "title": "Stutter",
-      "artist": "Joe"
     },
     {
       "title": "Lady Marmalade",
@@ -1529,10 +1421,6 @@
       "artist": "Eminem"
     },
     {
-      "title": "Gangsta Lovin'",
-      "artist": "Eve"
-    },
-    {
       "title": "Work It",
       "artist": "Missy Elliott"
     },
@@ -1543,10 +1431,6 @@
     {
       "title": "The Middle",
       "artist": "Jimmy Eat World"
-    },
-    {
-      "title": "All I Have",
-      "artist": "Jennifer Lopez"
     },
     {
       "title": "Hero",
@@ -1893,10 +1777,6 @@
       "artist": "Ne-Yo"
     },
     {
-      "title": "Me and U",
-      "artist": "Cassie"
-    },
-    {
       "title": "Check on It",
       "artist": "Beyonce"
     },
@@ -1911,14 +1791,6 @@
     {
       "title": "London Bridge",
       "artist": "Fergie"
-    },
-    {
-      "title": "Show Me What You Got",
-      "artist": "Jay-Z"
-    },
-    {
-      "title": "Black Horse and the Cherry Tree",
-      "artist": "KT Tunstall"
     },
     {
       "title": "Chasing Cars",
@@ -2473,10 +2345,6 @@
     {
       "title": "Safe and Sound",
       "artist": "Capital Cities"
-    },
-    {
-      "title": "Suit and Tie",
-      "artist": "Justin Timberlake"
     },
     {
       "title": "Applause",
