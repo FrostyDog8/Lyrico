@@ -993,7 +993,7 @@ function preloadNextSurpriseSong() {
     getRandomPopularSong()
         .then(song => fetchLyrics(song.title, song.artist).then(lyrics => ({ song, lyrics })))
         .then(({ song, lyrics }) => {
-            if (lyrics && lyrics.trim().length >= 50 && isLikelyEnglish(lyrics)) {
+            if (lyrics && lyrics.trim().length >= 50 && usesOnlyEnglishAlphabet(lyrics)) {
                 preloadedSurpriseSongs.push({ title: song.title, artist: song.artist, lyrics, year: song.year || null, rank: song.rank || null, topK: song.topK || null });
                 updatePreloadCounter();
             }
@@ -1026,7 +1026,7 @@ function preloadNextArtistSong() {
             return fetchLyrics(chosen.title, chosen.artist).then(lyrics => ({ title: chosen.title, artist: chosen.artist, lyrics }));
         })
         .then(result => {
-            if (result && result.lyrics && result.lyrics.trim().length >= 50 && isLikelyEnglish(result.lyrics)) {
+            if (result && result.lyrics && result.lyrics.trim().length >= 50 && usesOnlyEnglishAlphabet(result.lyrics)) {
                 preloadedArtistSongs.push({ title: result.title, artist: result.artist, lyrics: result.lyrics });
                 updatePreloadCounter();
             }
@@ -1181,7 +1181,7 @@ async function nextSurpriseSong() {
         }
         const lyrics = await fetchLyrics(song.title, song.artist);
         if (!lyrics || lyrics.trim().length < 50) throw new Error('No lyrics');
-        if (!isLikelyEnglish(lyrics)) throw new Error('Lyrics not English');
+        if (!usesOnlyEnglishAlphabet(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
         initializeGame(lyrics, song.title, song.artist, true, songYear || null, song.rank || null, song.topK || null);
         updateFailedSongsDisplay(globalFailedSongs);
         const wordInputEl = document.getElementById('wordInput');
@@ -1541,7 +1541,16 @@ async function startGame() {
 
         // Single song found, proceed directly
         const selectedSong = songs[0];
-        await loadSong(selectedSong.title, selectedSong.artist);
+        try {
+            await loadSong(selectedSong.title, selectedSong.artist, false, null, null, null, false);
+        } catch (loadErr) {
+            showError(loadErr.message || 'Could not load this song. Please try another.');
+            startBtn.innerHTML = 'Start Game';
+            startBtn.disabled = false;
+            if (surpriseBtn) { surpriseBtn.innerHTML = '🎲 Surprise Me!'; surpriseBtn.disabled = false; }
+            if (surpriseByArtistBtn) surpriseByArtistBtn.disabled = false;
+            return;
+        }
 
     } catch (error) {
         showError(error.message || 'Failed to search for songs. Please try again.');
@@ -1555,7 +1564,7 @@ async function startGame() {
     }
 }
 
-async function loadSong(title, artist, isSurprise = false, year = null, rank = null, topK = null) {
+async function loadSong(title, artist, isSurprise = false, year = null, rank = null, topK = null, showErrorOnFail = true) {
     const startBtn = document.getElementById('startBtn');
     const surpriseBtn = document.getElementById('surpriseBtn');
     const surpriseByArtistBtn = document.getElementById('surpriseByArtistBtn');
@@ -1626,11 +1635,11 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
         updateDevModeUI();
     } catch (error) {
         console.error('loadSong error:', error);
-        // Only show error if not called from surpriseMe (surpriseMe handles its own errors)
         if (!isSurprise) {
-            const errorMsg = error.message || 'Failed to fetch lyrics. Please try again.';
-            console.error('Showing error to user:', errorMsg);
-            showError(errorMsg);
+            if (showErrorOnFail) {
+                const errorMsg = error.message || 'Failed to fetch lyrics. Please try again.';
+                showError(errorMsg);
+            }
             startBtn.innerHTML = 'Start Game';
             startBtn.disabled = false;
             if (surpriseBtn) {
@@ -1639,7 +1648,6 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
             }
             if (surpriseByArtistBtn) surpriseByArtistBtn.disabled = false;
         }
-        // Always re-throw error so surpriseMe can handle it
         throw error;
     } finally {
         userSongLoadInProgress = false;
@@ -1647,7 +1655,7 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
     }
 }
 
-/** Common Spanish words (whole-word match). Used to detect Spanish lyrics; need 5+ matches to reject. */
+/** Common Spanish words (whole-word match). Used to detect Spanish lyrics; need 10+ matches to reject. */
 const SPANISH_WORDS = new Set([
     'que', 'como', 'esta', 'pero', 'para', 'porque', 'tambien', 'tiene', 'del', 'al', 'los', 'las',
     'una', 'eso', 'esa', 'todo', 'todos', 'nada', 'siempre', 'desde', 'hasta', 'donde', 'por', 'con',
@@ -1665,12 +1673,17 @@ const SPANISH_WORDS = new Set([
     'ella', 'nuestro', 'vuestro', 'estas', 'estos', 'esos', 'esas', 'aquella', 'aquel'
 ]);
 
+/** Words that are in SPANISH_WORDS but are also common in English (names, loanwords, etc.). Do not count these when detecting Spanish lyrics, so we don't reject English songs like "Bohemian Rhapsody" that use "sin", "con", "Los", "todo", etc. */
+const SPANISH_WORDS_ALSO_ENGLISH = new Set([
+    'con', 'sin', 'todo', 'todos', 'dame', 'ella', 'los', 'las', 'dan', 'para', 'nos', 'como', 'sobre'
+]);
+
 /** Normalize word for Spanish check: lowercase, strip accents (so "qué" matches "que"). */
 function normalizeForLangCheck(word) {
     return word.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
 }
 
-/** Count Spanish indicator words (whole words) in text. Only reject if >= 5 to avoid false positives. */
+/** Count Spanish indicator words (whole words) in text. Excludes words that are common in English to avoid false positives (e.g. "sin", "con", "Los Angeles", "todo"). Only reject if 10+ *Spanish-specific* words. */
 function countSpanishWords(text) {
     if (!text || typeof text !== 'string') return 0;
     const tokens = text.split(/[^\p{L}']+/u).filter(Boolean);
@@ -1678,22 +1691,26 @@ function countSpanishWords(text) {
     for (const token of tokens) {
         const w = normalizeForLangCheck(token);
         if (w.length < 2) continue;
-        if (SPANISH_WORDS.has(w)) count++;
+        if (SPANISH_WORDS.has(w) && !SPANISH_WORDS_ALSO_ENGLISH.has(w)) count++;
     }
     return count;
 }
 
-/** True if text looks like English. Rejects non-Latin scripts; rejects Spanish only if enough Spanish words (stricter for short text). */
+/** True if text uses only the English (Latin) alphabet. Accented letters (é, ñ, ü) are allowed because they normalize to a-z (e.g. Spanish "niño" → "nino"). Rejects scripts like Cyrillic, CJK, Arabic, Hebrew. */
+function usesOnlyEnglishAlphabet(text) {
+    if (!text || typeof text !== 'string') return true;
+    const normalized = text.normalize('NFD').replace(/\p{M}/gu, '');
+    for (const char of normalized) {
+        if (/\p{L}/u.test(char) && !/[a-zA-Z]/.test(char)) return false;
+    }
+    return true;
+}
+
+/** True if text looks like English. Rejects non-Latin scripts; rejects Spanish only if enough Spanish words. Used for Surprise Me preload filtering only. */
 function isLikelyEnglish(text) {
     if (!text || typeof text !== 'string') return true;
-    // Strong Spanish indicators in any amount (title/artist or lyrics with punctuation)
-    if (/ñ|¿|¡/i.test(text)) return false;
-    // Non-Latin scripts (CJK, Korean Hangul, Cyrillic, Arabic, Hebrew, Thai, Greek, etc.)
-    const nonLatin = /[\u0400-\u04FF\u0600-\u06FF\u0590-\u05FF\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u1100-\u11FF\u0E00-\u0E7F\u0370-\u03FF]/;
-    if (nonLatin.test(text)) return false;
-    // Short text (title/artist): skip Spanish word count to avoid false positives (e.g. "Queen", "Bohemian Rhapsody")
+    if (!usesOnlyEnglishAlphabet(text)) return false;
     if (text.length < 150) return true;
-    // Long text (lyrics): reject only if 10+ Spanish words to avoid banning English songs with a few shared words
     if (countSpanishWords(text) >= 10) return false;
     return true;
 }
@@ -1764,7 +1781,7 @@ async function searchSongs(query) {
 
         data.results.forEach(result => {
             if (!isOriginalVersion(result.trackName)) return;
-            if (!isLikelyEnglish(result.trackName) || !isLikelyEnglish(result.artistName)) return;
+            if (!usesOnlyEnglishAlphabet(result.trackName) || !usesOnlyEnglishAlphabet(result.artistName)) return;
             const key = `${result.trackName.toLowerCase()}_${result.artistName.toLowerCase()}`;
             if (!seen.has(key)) {
                 seen.add(key);
@@ -1803,11 +1820,10 @@ function showSongSelection(songs, query) {
         songItem.addEventListener('click', async () => {
             songSelectionOverlay.style.display = 'none';
             try {
-                await loadSong(song.title, song.artist);
+                await loadSong(song.title, song.artist, false, null, null, null, false);
             } catch (err) {
-                // Show error message and re-display overlay
-                showError(err.message || 'Could not load lyrics for this song. Please try another one.');
-                songSelectionOverlay.style.display = 'flex';
+                // Don't re-show selection; show reason in error area so player knows
+                showError(err.message || 'Could not load this song. Please try another.');
             }
         });
         songList.appendChild(songItem);
@@ -2019,7 +2035,8 @@ async function tryAllProviders(artist, title) {
     throw new Error(errors.length ? errors.join('; ') : 'All providers failed');
 }
 
-/** Main entry: resolve metadata via iTunes, try LRCLIB exact match if we have duration, then variations + providers. */
+/** Main entry: resolve metadata via iTunes, try LRCLIB exact match if we have duration, then variations + providers.
+ * Lyrics are rejected only if they use non-English-alphabet scripts (Cyrillic, CJK, Arabic, etc.). Spanish is allowed (accented letters normalize to a-z). */
 async function fetchLyrics(title, artist) {
     const iTunesMetadata = await getSongFromiTunes(title, artist);
     const exactTitle = iTunesMetadata.title;
@@ -2027,16 +2044,20 @@ async function fetchLyrics(title, artist) {
     const album = iTunesMetadata.album || '';
     const durationSeconds = iTunesMetadata.durationSeconds;
 
+    const checkAlphabet = (lyrics) => {
+        if (!usesOnlyEnglishAlphabet(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
+    };
+
     if (durationSeconds != null && durationSeconds > 0) {
         try {
             const lyrics = await fetchFromLrclibGet(exactArtist, exactTitle, album, durationSeconds);
             if (lyrics && lyrics.trim().length >= LYRICS_MIN_LENGTH) {
-                if (!isLikelyEnglish(lyrics)) throw new Error('Lyrics are not in English.');
+                checkAlphabet(lyrics);
                 console.log('Lyrics found via LRCLIB get (exact match).');
                 return lyrics;
             }
         } catch (err) {
-            if (err.message === 'Lyrics are not in English.') throw err;
+            if (err.message === 'Lyrics use characters outside the English alphabet.') throw err;
             console.log('LRCLIB get failed, trying search + providers:', err.message || err);
         }
     }
@@ -2047,12 +2068,12 @@ async function fetchLyrics(title, artist) {
         try {
             const lyrics = await tryAllProviders(a, t);
             if (lyrics && lyrics.trim().length >= LYRICS_MIN_LENGTH) {
-                if (!isLikelyEnglish(lyrics)) throw new Error('Lyrics are not in English.');
+                checkAlphabet(lyrics);
                 console.log(`Lyrics found for "${t}" by ${a} (variation ${i + 1}/${variations.length}).`);
                 return lyrics;
             }
         } catch (err) {
-            if (err.message === 'Lyrics are not in English.') throw err;
+            if (err.message === 'Lyrics use characters outside the English alphabet.') throw err;
             console.log(`Variation "${t}" by ${a}: ${err.message || err}`);
         }
     }
