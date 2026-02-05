@@ -1822,7 +1822,8 @@ function showSongSelection(songs, query) {
             try {
                 await loadSong(song.title, song.artist, false, null, null, null, false);
             } catch (err) {
-                // Don't re-show selection; show reason in error area so player knows
+                // Don't re-show selection popup; show reason in error area so player knows
+                songSelectionOverlay.style.display = 'none';
                 showError(err.message || 'Could not load this song. Please try another.');
             }
         });
