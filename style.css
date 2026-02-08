@@ -340,6 +340,17 @@ header h1 {
     margin-right: 8px;
 }
 
+.hebrew-song-banner {
+    font-size: 0.85em;
+    color: #555;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    text-align: center;
+    background: #f0f0f0;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
 .artist-mode-text {
     font-weight: 500;
 }
@@ -459,6 +470,34 @@ header h1 {
     border-right: none;
     padding-right: 0;
     padding-left: 15px;
+}
+
+/* Right-to-left layout for Hebrew lyrics */
+.lyrics-table-container.lyrics-rtl {
+    direction: rtl;
+    text-align: right;
+}
+
+.lyrics-table-container.lyrics-rtl .lyrics-table {
+    direction: rtl;
+}
+
+.lyrics-table-container.lyrics-rtl .lyrics-line {
+    direction: rtl;
+    justify-content: flex-start; /* In RTL, start is right — push word boxes to the right */
+}
+
+.lyrics-table-container.lyrics-rtl .lyrics-column {
+    border-right: none;
+    border-left: 2px solid #e0e0e0;
+    padding-right: 15px;
+    padding-left: 0;
+}
+
+.lyrics-table-container.lyrics-rtl .lyrics-column:last-child {
+    border-left: none;
+    padding-left: 0;
+    padding-right: 15px;
 }
 
 .lyrics-line {

@@ -19,8 +19,9 @@ let gameState = {
     titleRevealed: false, // Track if song title is revealed
     yearRevealed: false, // Track if song year is revealed
     yearRevealedBySong: false, // Track if year was revealed because song was revealed (vs manual reveal)
-    surpriseArtistName: '', // When set, Next Song picks another random song by this artist
-    requestedArtistName: '' // The original artist name requested by user (for display in banner, without collaborations)
+    surpriseArtistName: '', // When set, Next Song picks another random song by this artist (full name for display and for searching more songs)
+    requestedArtistName: '', // The original artist name requested by user (for searching)
+    artistModeDisplayName: '' // Resolved artist name for banner (e.g. "Imagine Dragons" when user searched "imagine drag"), no collab
 };
 
 // Initialize the game – attach lobby buttons so they always work
@@ -140,8 +141,10 @@ onDomReady(() => {
         gameState.isSurpriseSong = false;
         gameState.surpriseArtistName = '';
         gameState.requestedArtistName = '';
+        gameState.artistModeDisplayName = '';
         preloadedArtistSongs = [];
         preloadedArtistName = '';
+        preloadNextSurpriseSong(); // resume regular surprise preload when returning to lobby
         gameState.titleRevealed = false;
         gameState.yearRevealed = false;
         gameState.yearRevealedBySong = false;
@@ -929,11 +932,58 @@ async function compareRuntime() {
 // Expose comparison function globally for console access
 window.compareRuntime = compareRuntime;
 
-/** Fetch songs by artist via iTunes Search. Returns [{ title, artist }] filtered for original versions and English. */
+/** Primary artist only (before any collab): "Taylor Swift & Ed Sheeran" → "Taylor Swift". Used for grouping/suggestions; full artist can still show in-game. */
+function getPrimaryArtist(artistString) {
+    if (!artistString || typeof artistString !== 'string') return '';
+    const parts = artistString.split(/\s*,\s*|\s*&\s*|\s+feat\.?|\s+ft\.?|\s+and\s+|\s+with\s+|\s+x\s+/i);
+    return (parts[0] || '').trim() || artistString.trim();
+}
+
+/** Normalize artist name for comparison: trim, collapse spaces, remove parentheticals, lowercase. */
+function normalizeArtistName(name) {
+    if (!name || typeof name !== 'string') return '';
+    return name
+        .trim()
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+/** Returns true if two normalized names match (exact or one contains the other, min length 2). */
+function artistPartMatchesRequest(partNorm, reqNorm) {
+    if (partNorm === reqNorm) return true;
+    if (reqNorm.length >= 2 && partNorm.includes(reqNorm)) return true;
+    if (partNorm.length >= 2 && reqNorm.includes(partNorm)) return true;
+    return false;
+}
+
+/** First part of trackArtist that matches the request (primary or collab). Used to include more songs while grouping by "who the user meant". */
+function getMatchingArtistPart(trackArtist, requestedArtist) {
+    const req = normalizeArtistName(requestedArtist);
+    const tr = (trackArtist || '').trim();
+    if (!tr) return null;
+    const parts = tr.split(/\s*,\s*|\s*&\s*|\s+feat\.?|\s+ft\.?|\s+and\s+|\s+with\s+|\s+x\s+/i).map(p => p.trim()).filter(Boolean);
+    for (const part of parts) {
+        const pNorm = normalizeArtistName(part);
+        if (artistPartMatchesRequest(pNorm, req)) return part;
+    }
+    return null;
+}
+
+/** True if the request matches the track's primary artist or any collab part (so we find enough songs). */
+function isTrackByArtist(trackArtist, requestedArtist) {
+    return getMatchingArtistPart(trackArtist, requestedArtist) !== null;
+}
+
+/** Fetch songs by artist via iTunes Search. Returns { songs } or { needArtistSelection: true, artists, songsByArtist } when multiple artists match. Groups by the part that matched. When artistName contains a collab (e.g. "A & B"), the API is queried with the primary artist only so we get enough results; filtering still uses the full name. */
 async function getSongsByArtist(artistName) {
     const term = artistName.trim();
-    if (!term) return [];
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=100`;
+    if (!term) return { songs: [] };
+    const hasCollab = /\s+&\s+|\s+feat\.?|\s+ft\.?|\s+and\s+|\s+with\s+|\s+x\s+|\s*,\s*/.test(term);
+    const apiTerm = hasCollab ? getPrimaryArtist(term) : term;
+    if (!apiTerm) return { songs: [] };
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(apiTerm)}&media=music&entity=song&limit=100`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`iTunes search failed: ${res.status}`);
     const data = await res.json();
@@ -944,13 +994,39 @@ async function getSongsByArtist(artistName) {
         const title = (r.trackName || '').trim();
         const artist = (r.artistName || '').trim() || 'Unknown';
         if (!title || !isOriginalVersion(title)) continue;
-        if (!isLikelyEnglish(title) || !isLikelyEnglish(artist)) continue;
+        const matchingPart = getMatchingArtistPart(artist, term);
+        if (!matchingPart) continue;
+        const okTitle = isLikelyEnglish(title) || isHebrew(title);
+        const okArtist = isLikelyEnglish(artist) || isHebrew(artist);
+        if (!okTitle || !okArtist) continue;
         const key = `${title.toLowerCase()}|${artist.toLowerCase()}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({ title, artist });
     }
-    return out;
+    const termNorm = normalizeArtistName(term);
+    const byMatchedArtist = {};
+    out.forEach(s => {
+        const part = getMatchingArtistPart(s.artist, term);
+        if (!part) return;
+        if (!byMatchedArtist[part]) byMatchedArtist[part] = [];
+        byMatchedArtist[part].push(s);
+    });
+    let artists = Object.keys(byMatchedArtist);
+    artists = artists.filter(a => artistPartMatchesRequest(normalizeArtistName(a), termNorm));
+    if (artists.length > 1) {
+        return { needArtistSelection: true, artists, songsByArtist: byMatchedArtist };
+    }
+    return { songs: out };
+}
+
+/** Get a flat songs array from getSongsByArtist result (for preload and Next Song when not showing artist picker). */
+function getSongsArrayFromArtistResult(result) {
+    if (!result) return [];
+    if (result.songs && result.songs.length) return result.songs;
+    if (result.needArtistSelection && result.artists && result.songsByArtist)
+        return result.artists.flatMap(a => result.songsByArtist[a] || []);
+    return [];
 }
 
 // Global failed songs list
@@ -986,9 +1062,13 @@ function updatePreloadCounter() {
     }
 }
 
-/** Load one more song into the queue if we have room. Skips when user is loading a specific song (priority). */
+/** Load one more song into the queue if we have room. Skips when user is loading a specific song (priority). In artist mode, gives priority to artist preload until that queue is full. */
 function preloadNextSurpriseSong() {
     if (userSongLoadInProgress || preloadedSurpriseSongs.length >= PRELOAD_QUEUE_MAX || preloadInProgress) return;
+    if (gameState.surpriseArtistName && gameState.surpriseArtistName.trim() && preloadedArtistSongs.length < PRELOAD_QUEUE_MAX) {
+        preloadNextArtistSong();
+        return;
+    }
     preloadInProgress = true;
     getRandomPopularSong()
         .then(song => fetchLyrics(song.title, song.artist).then(lyrics => ({ song, lyrics })))
@@ -1005,17 +1085,18 @@ function preloadNextSurpriseSong() {
         });
 }
 
-/** Load one more song by current artist into artist queue. Only runs when surpriseArtistName is set; does not block global preload. */
+/** Load one more song by current artist. Uses same search term as first song (requestedArtistName) so we get the same pool as Next Song. */
 function preloadNextArtistSong() {
-    const artist = gameState.surpriseArtistName && gameState.surpriseArtistName.trim();
-    if (!artist || userSongLoadInProgress || preloadedArtistSongs.length >= PRELOAD_QUEUE_MAX || preloadArtistInProgress) return;
-    if (preloadedArtistName !== artist) {
-        preloadedArtistName = artist;
+    const searchTerm = (gameState.requestedArtistName && gameState.requestedArtistName.trim()) || (gameState.surpriseArtistName && gameState.surpriseArtistName.trim());
+    if (!searchTerm || userSongLoadInProgress || preloadedArtistSongs.length >= PRELOAD_QUEUE_MAX || preloadArtistInProgress) return;
+    if (preloadedArtistName !== searchTerm) {
+        preloadedArtistName = searchTerm;
         preloadedArtistSongs = [];
     }
     preloadArtistInProgress = true;
-    getSongsByArtist(artist)
-        .then(songs => {
+    getSongsByArtist(searchTerm)
+        .then(result => {
+            const songs = getSongsArrayFromArtistResult(result);
             if (!songs.length) return null;
             let pool = songs.filter(s => !triedSongsInSession.has(`${s.title.toLowerCase()}_${s.artist.toLowerCase()}`));
             if (pool.length === 0) {
@@ -1026,16 +1107,19 @@ function preloadNextArtistSong() {
             return fetchLyrics(chosen.title, chosen.artist).then(lyrics => ({ title: chosen.title, artist: chosen.artist, lyrics }));
         })
         .then(result => {
-            if (result && result.lyrics && result.lyrics.trim().length >= 50 && usesOnlyEnglishAlphabet(result.lyrics)) {
-                preloadedArtistSongs.push({ title: result.title, artist: result.artist, lyrics: result.lyrics });
+            if (result && result.lyrics && result.lyrics.trim().length >= 50 && (usesOnlyEnglishAlphabet(result.lyrics) || isHebrew(result.lyrics))) {
+                preloadedArtistSongs.push({ title: result.title, artist: result.artist, lyrics: result.lyrics, isHebrew: isHebrew(result.lyrics) });
                 updatePreloadCounter();
             }
         })
         .catch(() => {})
         .finally(() => {
             preloadArtistInProgress = false;
-            if (gameState.surpriseArtistName && gameState.surpriseArtistName.trim() && preloadedArtistSongs.length < PRELOAD_QUEUE_MAX) {
+            const st = (gameState.requestedArtistName && gameState.requestedArtistName.trim()) || (gameState.surpriseArtistName && gameState.surpriseArtistName.trim());
+            if (st && preloadedArtistSongs.length < PRELOAD_QUEUE_MAX) {
                 preloadNextArtistSong();
+            } else {
+                preloadNextSurpriseSong(); // resume regular surprise preload when artist queue full or not in artist mode
             }
         });
 }
@@ -1127,7 +1211,7 @@ async function nextSurpriseSong() {
             if (!gameState.requestedArtistName) {
                 gameState.requestedArtistName = preloadedArtist.artist;
             }
-            initializeGame(preloadedArtist.lyrics, preloadedArtist.title, preloadedArtist.artist, true, preloadedArtist.year || null, preloadedArtist.rank || null, preloadedArtist.topK || null);
+            initializeGame(preloadedArtist.lyrics, preloadedArtist.title, preloadedArtist.artist, true, preloadedArtist.year || null, preloadedArtist.rank || null, preloadedArtist.topK || null, preloadedArtist.isHebrew || false);
             updateFailedSongsDisplay(globalFailedSongs);
             document.getElementById('gameArea').style.display = 'block';
             const wordInputEl = document.getElementById('wordInput');
@@ -1144,7 +1228,9 @@ async function nextSurpriseSong() {
     try {
         let song;
         if (byArtist) {
-            const songs = await getSongsByArtist(gameState.surpriseArtistName);
+            const searchTerm = (gameState.requestedArtistName && gameState.requestedArtistName.trim()) || gameState.surpriseArtistName;
+            const artistResult = await getSongsByArtist(searchTerm);
+            const songs = getSongsArrayFromArtistResult(artistResult);
             if (!songs.length) throw new Error('No songs for this artist');
             let pool = songs.filter(s => !triedSongsInSession.has(`${s.title.toLowerCase()}_${s.artist.toLowerCase()}`));
             if (pool.length === 0) {
@@ -1181,8 +1267,8 @@ async function nextSurpriseSong() {
         }
         const lyrics = await fetchLyrics(song.title, song.artist);
         if (!lyrics || lyrics.trim().length < 50) throw new Error('No lyrics');
-        if (!usesOnlyEnglishAlphabet(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
-        initializeGame(lyrics, song.title, song.artist, true, songYear || null, song.rank || null, song.topK || null);
+        if (!usesOnlyEnglishAlphabet(lyrics) && !isHebrew(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
+        initializeGame(lyrics, song.title, song.artist, true, songYear || null, song.rank || null, song.topK || null, isHebrew(lyrics));
         updateFailedSongsDisplay(globalFailedSongs);
         const wordInputEl = document.getElementById('wordInput');
         if (wordInputEl) wordInputEl.focus();
@@ -1397,7 +1483,9 @@ async function surpriseByArtist() {
 
     errorMessage.classList.remove('show');
     const songSelectionOverlay = document.getElementById('songSelectionOverlay');
+    const artistSelectionOverlay = document.getElementById('artistSelectionOverlay');
     if (songSelectionOverlay) songSelectionOverlay.style.display = 'none';
+    if (artistSelectionOverlay) artistSelectionOverlay.style.display = 'none';
 
     if (!artistName) {
         showError('Please enter an artist name');
@@ -1415,7 +1503,22 @@ async function surpriseByArtist() {
 
     let songs = [];
     try {
-        songs = await getSongsByArtist(artistName);
+        const result = await getSongsByArtist(artistName);
+        if (result.needArtistSelection) {
+            songs = await showArtistSelection(result.artists, result.songsByArtist);
+            if (songs == null) {
+                surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+                surpriseByArtistBtn.disabled = false;
+                startBtn.disabled = false;
+                if (surpriseBtn) surpriseBtn.disabled = false;
+                return;
+            }
+        } else {
+            songs = result.songs || [];
+            if (songs.length) {
+                gameState.artistModeDisplayName = getMatchingArtistPart(songs[0].artist, artistName) || artistName;
+            }
+        }
     } catch (e) {
         showError('Could not find songs for that artist. Try another name.');
         surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
@@ -1603,7 +1706,7 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
         }
 
         // Initialize game
-        initializeGame(lyrics, title, artist, isSurprise, year, rank, topK);
+        initializeGame(lyrics, title, artist, isSurprise, year, rank, topK, isHebrew(lyrics));
 
         // Hide selection if visible
         const songSelectionOverlay = document.getElementById('songSelectionOverlay');
@@ -1696,6 +1799,12 @@ function countSpanishWords(text) {
     return count;
 }
 
+/** True if text contains Hebrew letters (Unicode block \u0590-\u05FF). */
+function isHebrew(text) {
+    if (!text || typeof text !== 'string') return false;
+    return /[\u0590-\u05FF]/.test(text);
+}
+
 /** True if text uses only the English (Latin) alphabet. Accented letters (é, ñ, ü) are allowed because they normalize to a-z (e.g. Spanish "niño" → "nino"). Rejects scripts like Cyrillic, CJK, Arabic, Hebrew. */
 function usesOnlyEnglishAlphabet(text) {
     if (!text || typeof text !== 'string') return true;
@@ -1781,7 +1890,9 @@ async function searchSongs(query) {
 
         data.results.forEach(result => {
             if (!isOriginalVersion(result.trackName)) return;
-            if (!usesOnlyEnglishAlphabet(result.trackName) || !usesOnlyEnglishAlphabet(result.artistName)) return;
+            const okTitle = usesOnlyEnglishAlphabet(result.trackName) || isHebrew(result.trackName);
+            const okArtist = usesOnlyEnglishAlphabet(result.artistName) || isHebrew(result.artistName);
+            if (!okTitle || !okArtist) return;
             const key = `${result.trackName.toLowerCase()}_${result.artistName.toLowerCase()}`;
             if (!seen.has(key)) {
                 seen.add(key);
@@ -1794,6 +1905,44 @@ async function searchSongs(query) {
         });
 
     return uniqueSongs;
+}
+
+/** Show artist selection overlay; returns a Promise that resolves to the chosen artist's songs array or null if cancelled. */
+function showArtistSelection(artists, songsByArtist) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('artistSelectionOverlay');
+        const artistList = document.getElementById('artistList');
+        const cancelBtn = document.getElementById('cancelArtistSelectionBtn');
+        if (!overlay || !artistList) {
+            resolve(artists.length === 1 ? (songsByArtist[artists[0]] || []) : null);
+            return;
+        }
+        artistList.innerHTML = '';
+        artists.forEach((artistName) => {
+            const songs = songsByArtist[artistName] || [];
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            item.innerHTML = `
+                <div class="song-item-info">
+                    <strong>${artistName}</strong>
+                    <span class="song-artist">${songs.length} song${songs.length !== 1 ? 's' : ''}</span>
+                </div>
+            `;
+            item.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                gameState.artistModeDisplayName = artistName;
+                resolve(songs);
+            });
+            artistList.appendChild(item);
+        });
+        const onCancel = () => {
+            overlay.style.display = 'none';
+            cancelBtn.removeEventListener('click', onCancel);
+            resolve(null);
+        };
+        cancelBtn.addEventListener('click', onCancel);
+        overlay.style.display = 'flex';
+    });
 }
 
 function showSongSelection(songs, query) {
@@ -2046,7 +2195,7 @@ async function fetchLyrics(title, artist) {
     const durationSeconds = iTunesMetadata.durationSeconds;
 
     const checkAlphabet = (lyrics) => {
-        if (!usesOnlyEnglishAlphabet(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
+        if (!usesOnlyEnglishAlphabet(lyrics) && !isHebrew(lyrics)) throw new Error('Lyrics use characters outside the English alphabet.');
     };
 
     if (durationSeconds != null && durationSeconds > 0) {
@@ -2084,7 +2233,7 @@ async function fetchLyrics(title, artist) {
 
 // ---------- End lyrics fetching ----------
 
-function initializeGame(lyrics, title, artist, isSurprise = false, year = null, rank = null, topK = null) {
+function initializeGame(lyrics, title, artist, isSurprise = false, year = null, rank = null, topK = null, isHebrewSong = false) {
     // Store original lyrics for reference
     console.log('Initializing game with lyrics:', lyrics.substring(0, 200) + '...');
     
@@ -2109,6 +2258,7 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
     gameState.songYearTopK = topK;
     gameState.lyricsRevealed = false;
     gameState.isSurpriseSong = isSurprise;
+    gameState.isHebrew = isHebrewSong;
     gameState.titleRevealed = !isSurprise; // Hide title if surprise song
     // Only track year reveal state in surprise mode (not artist mode)
     const isArtistMode = gameState.surpriseArtistName && gameState.surpriseArtistName.trim();
@@ -2191,49 +2341,7 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
     if (gameState.surpriseArtistName && gameState.surpriseArtistName.trim()) {
         if (artistModeBanner) artistModeBanner.style.display = 'block';
         if (artistModeName) {
-            // Use requested artist name if available, otherwise use the song artist
-            let displayName = gameState.requestedArtistName || gameState.surpriseArtistName;
-            
-            // If we have a requested artist name and the song artist contains collaborations,
-            // try to extract just the requested artist from the collaboration
-            if (gameState.requestedArtistName && gameState.surpriseArtistName) {
-                const requestedLower = gameState.requestedArtistName.toLowerCase().trim();
-                const songArtist = gameState.surpriseArtistName;
-                const songArtistLower = songArtist.toLowerCase();
-                
-                // Check if song artist contains collaboration markers
-                if (songArtistLower.includes(' & ') || songArtistLower.includes(' feat. ') || 
-                    songArtistLower.includes(' ft. ') || songArtistLower.includes(' featuring ') ||
-                    songArtistLower.includes(', ')) {
-                    // Split by collaboration markers
-                    const parts = songArtist.split(/[&,]/).map(p => 
-                        p.replace(/\s*(feat\.|ft\.|featuring)\s*/gi, '').trim()
-                    );
-                    
-                    // Find the part that matches the requested artist (case-insensitive partial match)
-                    const matchingPart = parts.find(p => {
-                        const pLower = p.toLowerCase().trim();
-                        return pLower.includes(requestedLower) || requestedLower.includes(pLower);
-                    });
-                    
-                    if (matchingPart) {
-                        displayName = matchingPart.trim();
-                    } else {
-                        // If no match found, use the requested name as-is
-                        displayName = gameState.requestedArtistName;
-                    }
-                } else {
-                    // No collaboration markers, use requested name
-                    displayName = gameState.requestedArtistName;
-                }
-            }
-            
-            // Capitalize first letter of each word for better display
-            displayName = displayName.split(' ').map(word => 
-                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-            ).join(' ');
-            
-            artistModeName.textContent = displayName;
+            artistModeName.textContent = gameState.artistModeDisplayName || gameState.requestedArtistName || gameState.surpriseArtistName;
         }
     } else {
         if (artistModeBanner) artistModeBanner.style.display = 'none';
@@ -2315,6 +2423,17 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
 
     // Create lyrics table
     createLyricsTable(words);
+
+    // Hebrew: show banner and set lyrics table RTL
+    const lyricsContainer = document.querySelector('.lyrics-table-container');
+    const hebrewBanner = document.getElementById('hebrewSongBanner');
+    if (isHebrewSong) {
+        if (lyricsContainer) { lyricsContainer.dir = 'rtl'; lyricsContainer.classList.add('lyrics-rtl'); }
+        if (hebrewBanner) { hebrewBanner.style.display = 'block'; }
+    } else {
+        if (lyricsContainer) { lyricsContainer.dir = 'ltr'; lyricsContainer.classList.remove('lyrics-rtl'); }
+        if (hebrewBanner) { hebrewBanner.style.display = 'none'; }
+    }
     
     console.log(`Game initialized: ${gameState.totalWords} words to find`);
 }
@@ -2371,8 +2490,8 @@ function tokenizeLyrics(lyrics) {
 }
 
 function normalizeWord(word) {
-    // Remove punctuation and convert to lowercase for comparison
-    return word.replace(/[^\w]/g, '').toLowerCase();
+    // Remove punctuation and convert to lowercase for comparison. Use \p{L}\p{N} so Hebrew and other Unicode letters are kept.
+    return word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 }
 
 /** Normalized "oh"-style words: guessing any of these reveals all of them in the lyrics. */

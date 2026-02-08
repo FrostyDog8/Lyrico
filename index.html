@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="container">
-        <p class="version-sign">v1.3</p>
+        <p class="version-sign">v1.4</p>
         <div class="dev-mode-row">
             <button id="devModeBtn" class="btn btn-dev-mode" title="Toggle Developer Mode">🔧</button>
             <span id="preloadCounter" class="preload-counter" style="display: none;" title="Preloaded surprise songs ready">Songs ready: <strong id="preloadCount">0</strong> / 5</span>
@@ -63,6 +63,14 @@
                     <button id="cancelSelectionBtn" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
+            <div id="artistSelectionOverlay" class="song-selection-overlay" style="display: none;">
+                <div id="artistSelection" class="song-selection">
+                    <h3>Multiple artists found</h3>
+                    <p class="song-selection-subtitle">Which artist did you mean?</p>
+                    <div id="artistList" class="song-list"></div>
+                    <button id="cancelArtistSelectionBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
         </div>
 
         <div class="game-area" id="gameArea" style="display: none;">
@@ -70,6 +78,7 @@
                 <span class="artist-mode-icon">🎤</span>
                 <span class="artist-mode-text">Playing songs by: <strong id="artistModeName"></strong></span>
             </div>
+            <div id="hebrewSongBanner" class="hebrew-song-banner" style="display: none;">This song is in Hebrew</div>
             <div class="game-area-top-bar">
                 <div class="game-area-top-left">
                     <button id="backBtn" class="btn btn-secondary back-btn">← Back to Main</button>
