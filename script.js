@@ -21,7 +21,8 @@ let gameState = {
     yearRevealedBySong: false, // Track if year was revealed because song was revealed (vs manual reveal)
     surpriseArtistName: '', // When set, Next Song picks another random song by this artist (full name for display and for searching more songs)
     requestedArtistName: '', // The original artist name requested by user (for searching)
-    artistModeDisplayName: '' // Resolved artist name for banner (e.g. "Imagine Dragons" when user searched "imagine drag"), no collab
+    artistModeDisplayName: '', // Resolved artist name for banner (e.g. "Imagine Dragons" when user searched "imagine drag"), no collab
+    hintRevealedIndices: new Set() // Indices of word slots revealed by hint (not counted as "found" in summary)
 };
 
 // Initialize the game – attach lobby buttons so they always work
@@ -208,6 +209,10 @@ onDomReady(() => {
     const giveUpBtn = document.getElementById('giveUpBtn');
     if (giveUpBtn) {
         giveUpBtn.addEventListener('click', showGiveUpConfirmation);
+    }
+    const hintBtn = document.getElementById('hintBtn');
+    if (hintBtn) {
+        hintBtn.addEventListener('click', useHint);
     }
 
     // Help modal handlers
@@ -444,6 +449,12 @@ function updateDevModeUI() {
             // Rank
             if (gameState.songRank && gameState.songYearTopK) {
                 parts.push(`Rank: #${gameState.songRank} of top ${gameState.songYearTopK}`);
+            }
+            
+            // Artist mode: show the term used when searching for more songs (preload / Next Song)
+            const artistSearchTerm = (gameState.requestedArtistName && gameState.requestedArtistName.trim()) || (gameState.surpriseArtistName && gameState.surpriseArtistName.trim());
+            if (artistSearchTerm) {
+                parts.push('Artist search: ' + artistSearchTerm);
             }
             
             if (parts.length > 0) {
@@ -2249,6 +2260,7 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
     gameState.words = words;
     gameState.foundWords = new Set();
     gameState.userGuessedWords = new Set();
+    gameState.hintRevealedIndices = new Set();
     gameState.totalWords = actualWordCount;
     gameState.foundCount = 0;
     gameState.songTitle = title;
@@ -2393,6 +2405,7 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
             youtubeLink.style.display = 'none';
         }
         if (nextSongBtn) {
+            nextSongBtn.classList.remove('song-done');
             nextSongBtn.style.display = 'inline-block';
         }
     } else {
@@ -2414,12 +2427,15 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
             youtubeLink.style.display = 'inline-block';
         }
         if (nextSongBtn) {
+            nextSongBtn.classList.remove('song-done');
             nextSongBtn.style.display = 'none';
         }
     }
     
     document.getElementById('totalCount').textContent = gameState.totalWords;
     document.getElementById('foundCount').textContent = '0';
+    updateHintCountDisplay();
+    updateLastRevealedDisplay('', 0, null);
 
     // Create lyrics table
     createLyricsTable(words);
@@ -2466,8 +2482,8 @@ function tokenizeLyrics(lyrics) {
         
         const lineWords = line.trim().split(/\s+/);
         lineWords.forEach((word, wordIndex) => {
-            // Split on hyphens so "one-two" or "well-known" become separate words (handles multiple hyphens)
-            const parts = word.split('-').filter(p => p.length > 0);
+            // Split on hyphens and Unicode dashes (en-dash, em-dash) so "oh-ooh" / "oh–ooh" become "oh" and "ooh"
+            const parts = word.split(/\p{Pd}/u).filter(p => p.length > 0);
             if (parts.length === 0) return;
             parts.forEach((part) => {
                 const normalized = normalizeWord(part);
@@ -2494,9 +2510,9 @@ function normalizeWord(word) {
     return word.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
 }
 
-/** Normalized "oh"-style words: guessing any of these reveals all of them in the lyrics. */
+/** Normalized "oh"-style words (oh, ooh, ah, uh, etc.): guessing any of these reveals all of them in the lyrics. */
 const OH_VARIANTS = new Set([
-    'oh', 'ooh', 'ohh', 'oooh', 'ohhh', 'oohh', 'ooooh', 'ohhhh', 'oohoh',
+    'oh', 'ooh', 'ohh', 'oooh', 'ohhh', 'oohh', 'ooooh', 'ohhhh', 'oohoh', 'ohooh',
     'ah', 'ahh', 'aah', 'ahhh', 'aaah', 'ahhhh', 'aahh', 'ahah',
     'uh', 'uhh', 'uuh', 'uhhh', 'uuuh', 'uhhhh', 'uuhh', 'uhuh'
 ]);
@@ -2618,9 +2634,10 @@ function hideLyrics() {
                 // Only hide if it wasn't user-guessed
                 if (!gameState.userGuessedWords.has(wordObj.normalized)) {
                     slot.textContent = '';
-                    slot.classList.remove('found');
+                    slot.classList.remove('found', 'hint-revealed');
                     slot.classList.add('empty');
                     gameState.foundWords.delete(wordObj.normalized);
+                    gameState.hintRevealedIndices.delete(index);
                 }
             }
         }
@@ -2632,6 +2649,7 @@ function hideLyrics() {
     ).length;
     gameState.foundCount = userFoundCount;
     document.getElementById('foundCount').textContent = userFoundCount;
+    updateHintCountDisplay();
     
     // Check if user has completed the game naturally
     if (gameState.foundCount >= gameState.totalWords) {
@@ -2731,13 +2749,12 @@ function handleGiveUp() {
     // Reveal all lyrics
     revealAllLyrics();
     
-    // Mark missed words (not user-guessed) with special styling
+    // Mark missed words (not user-guessed) with special styling; don't mark hint-revealed as missed
     gameState.words.forEach((wordObj, index) => {
         if (!wordObj.isNewline) {
             const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
             if (slot && slot.classList.contains('found')) {
-                // If this word wasn't guessed by the user, mark it as missed
-                if (!userGuessedBefore.has(wordObj.normalized)) {
+                if (!userGuessedBefore.has(wordObj.normalized) && !slot.classList.contains('hint-revealed')) {
                     slot.classList.add('give-up-missed');
                 }
             }
@@ -2783,8 +2800,6 @@ function handleGiveUp() {
         }
     }
     
-    const percentage = totalWords > 0 ? Math.round((userFoundCount / totalWords) * 100) : 0;
-    
     // Replace input section with end-of-game stats
     const inputSection = document.getElementById('inputSection');
     const endGameStats = document.getElementById('endGameStats');
@@ -2797,16 +2812,21 @@ function handleGiveUp() {
         endGameStats.classList.remove('victory');
         endGameStats.style.display = 'block';
     }
-    if (endGameTitle) endGameTitle.textContent = 'Game Over';
-    if (endGameFound) endGameFound.textContent = userFoundCount;
+    const userFoundOnly = userFoundCount - (gameState.hintRevealedIndices ? gameState.hintRevealedIndices.size : 0);
+    const percentageUser = totalWords > 0 ? Math.round((userFoundOnly / totalWords) * 100) : 0;
+    if (endGameTitle) endGameTitle.textContent = getEndGameMessage(percentageUser, true);
+    if (endGameFound) endGameFound.textContent = userFoundOnly;
     if (endGameTotal) endGameTotal.textContent = totalWords;
-    if (endGamePct) endGamePct.textContent = percentage + '%';
+    if (endGamePct) endGamePct.textContent = percentageUser + '%';
     
     const giveUpResults = document.getElementById('giveUpResults');
     if (giveUpResults) giveUpResults.style.display = 'none';
     
     const giveUpBtn = document.getElementById('giveUpBtn');
     if (giveUpBtn) giveUpBtn.style.display = 'none';
+    
+    const nextSongBtn = document.getElementById('nextSongBtn');
+    if (nextSongBtn && nextSongBtn.style.display !== 'none') nextSongBtn.classList.add('song-done');
     
     if (endGameStats) {
         setTimeout(() => endGameStats.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
@@ -3066,6 +3086,7 @@ function checkWord(inputWord, shouldClearInput = false) {
             gameState.foundCount += ohMatches.length;
             revealWord(normalizedInput, ohMatches);
             document.getElementById('foundCount').textContent = gameState.foundCount;
+            updateLastRevealedDisplay(gameState.words[ohMatches[0]].word, ohMatches.length, false);
             if (shouldClearInput) document.getElementById('wordInput').value = '';
             if (!gameState.lyricsRevealed && gameState.foundCount >= gameState.totalWords) {
                 if (gameState.isSurpriseSong && !gameState.titleRevealed) {
@@ -3104,7 +3125,7 @@ function checkWord(inputWord, shouldClearInput = false) {
         gameState.foundWords.add(normalizedInput);
         gameState.userGuessedWords.add(normalizedInput); // Mark as user-guessed
         gameState.foundCount += matches.length;
-        
+        updateLastRevealedDisplay(gameState.words[matches[0]].word, matches.length, false);
         // Update stats
         document.getElementById('foundCount').textContent = gameState.foundCount;
         
@@ -3132,7 +3153,7 @@ function checkWord(inputWord, shouldClearInput = false) {
     return false;
 }
 
-function revealWord(normalizedWord, indices) {
+function revealWord(normalizedWord, indices, isHint = false) {
     indices.forEach(index => {
         const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
         if (slot && !slot.classList.contains('found')) {
@@ -3140,8 +3161,88 @@ function revealWord(normalizedWord, indices) {
             slot.textContent = wordObj.word;
             slot.classList.remove('empty');
             slot.classList.add('found');
+            if (isHint) {
+                slot.classList.add('hint-revealed');
+                gameState.hintRevealedIndices.add(index);
+            }
         }
     });
+    if (isHint) updateHintCountDisplay();
+}
+
+function updateHintCountDisplay() {
+    const note = document.getElementById('hintCountNote');
+    const countEl = document.getElementById('hintRevealedCount');
+    const n = gameState.hintRevealedIndices ? gameState.hintRevealedIndices.size : 0;
+    if (note) {
+        note.style.display = n > 0 ? 'inline' : 'none';
+    }
+    if (countEl) countEl.textContent = String(n);
+}
+
+function updateLastRevealedDisplay(displayWord, count, isHint) {
+    const el = document.getElementById('lastRevealedCenter');
+    if (!el) return;
+    el.classList.remove('last-revealed-hint', 'last-revealed-guess');
+    if (displayWord != null && displayWord !== '' && count != null && count > 0) {
+        const times = count === 1 ? '1 time' : count + ' times';
+        el.textContent = "Last revealed: \u201C" + displayWord + "\u201D (" + times + ")";
+        el.classList.add(isHint ? 'last-revealed-hint' : 'last-revealed-guess');
+    } else {
+        el.textContent = '';
+    }
+}
+
+function useHint() {
+    if (!gameState.words || gameState.words.length === 0 || gameState.lyricsRevealed) return;
+    const unrevealedByNormalized = new Map();
+    gameState.words.forEach((wordObj, index) => {
+        if (wordObj.isNewline) return;
+        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        if (!slot || slot.classList.contains('found')) return;
+        const norm = wordObj.normalized;
+        if (!unrevealedByNormalized.has(norm)) unrevealedByNormalized.set(norm, []);
+        unrevealedByNormalized.get(norm).push(index);
+    });
+    const candidates = Array.from(unrevealedByNormalized.entries()).filter(([, indices]) => indices.length > 0);
+    if (candidates.length === 0) return;
+    const [chosenNormalized, indices] = candidates[Math.floor(Math.random() * candidates.length)];
+    const displayWord = gameState.words[indices[0]].word;
+    revealWord(chosenNormalized, indices, true);
+    indices.forEach(i => gameState.foundWords.add(gameState.words[i].normalized));
+    gameState.foundCount += indices.length;
+    document.getElementById('foundCount').textContent = gameState.foundCount;
+    updateHintCountDisplay();
+    updateLastRevealedDisplay(displayWord, indices.length, true);
+    if (!gameState.lyricsRevealed && gameState.foundCount >= gameState.totalWords) {
+        if (gameState.isSurpriseSong && !gameState.titleRevealed) {
+            revealSongTitle();
+            const revealTitleBtn = document.getElementById('revealTitleBtn');
+            if (revealTitleBtn) revealTitleBtn.textContent = 'Hide Song';
+        }
+        showVictory();
+    }
+}
+
+/** Returns the end-game title message by completion % and whether the player gave up. Encouraging for all; sarcastic only for 10% or less when completed (not give up). */
+function getEndGameMessage(completionPct, isGiveUp) {
+    const p = Math.min(100, Math.max(0, completionPct));
+    if (p <= 10 && !isGiveUp) {
+        return "All done! …with a little help from the hints. 😉";
+    }
+    if (p <= 10) {
+        return "Tough song! No shame in trying—give it another shot sometime.";
+    }
+    if (p <= 19) return "It's a start! The more you play, the better you'll get.";
+    if (p <= 29) return "You're building your skills! Try again anytime.";
+    if (p <= 39) return "Every word counts! Keep going!";
+    if (p <= 49) return "You found quite a few! Keep listening!";
+    if (p <= 59) return "Good effort! Half the song—that's something!";
+    if (p <= 69) return "Nice work! You're getting there!";
+    if (p <= 79) return "Well done! You've got a great ear!";
+    if (p <= 89) return "Great job! You really know your lyrics!";
+    if (p <= 99) return "Amazing! Almost perfect!";
+    return "Perfection!";
 }
 
 function showVictory() {
@@ -3157,11 +3258,16 @@ function showVictory() {
         endGameStats.classList.add('victory');
         endGameStats.style.display = 'block';
     }
-    if (endGameTitle) endGameTitle.textContent = 'You did it!';
-    if (endGameFound) endGameFound.textContent = totalWords;
+    const userFoundOnly = totalWords - (gameState.hintRevealedIndices ? gameState.hintRevealedIndices.size : 0);
+    const completionPct = totalWords > 0 ? Math.round((userFoundOnly / totalWords) * 100) : 100;
+    if (endGameTitle) endGameTitle.textContent = getEndGameMessage(completionPct, false);
+    if (endGameFound) endGameFound.textContent = userFoundOnly;
     if (endGameTotal) endGameTotal.textContent = totalWords;
-    if (endGamePct) endGamePct.textContent = '100%';
-    document.getElementById('victoryMessage').style.display = 'block';
+    if (endGamePct) endGamePct.textContent = completionPct + '%';
+    const victoryMessage = document.getElementById('victoryMessage');
+    if (victoryMessage) victoryMessage.style.display = 'none';
+    const nextSongBtn = document.getElementById('nextSongBtn');
+    if (nextSongBtn && nextSongBtn.style.display !== 'none') nextSongBtn.classList.add('song-done');
     if (endGameStats) {
         setTimeout(() => endGameStats.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     }

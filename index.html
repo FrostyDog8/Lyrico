@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="container">
-        <p class="version-sign">v1.4</p>
+        <p class="version-sign">v1.5</p>
         <div class="dev-mode-row">
             <button id="devModeBtn" class="btn btn-dev-mode" title="Toggle Developer Mode">🔧</button>
             <span id="preloadCounter" class="preload-counter" style="display: none;" title="Preloaded surprise songs ready">Songs ready: <strong id="preloadCount">0</strong> / 5</span>
@@ -121,7 +121,9 @@
                     <button id="revealBtn" class="btn btn-secondary" title="Reveal all lyrics" style="display: none;">Reveal Lyrics</button>
                 </div>
                 <div class="stats">
-                    <span>Found: <span id="foundCount">0</span> / <span id="totalCount">0</span></span>
+                    <span class="stats-left">Found: <span id="foundCount">0</span> / <span id="totalCount">0</span><span id="hintCountNote" class="hint-count-note" style="display: none;"> (<span id="hintRevealedCount">0</span> from hints)</span></span>
+                    <span id="lastRevealedCenter" class="stats-center"></span>
+                    <button id="hintBtn" class="btn btn-hint" type="button" title="Reveal a random word (all instances)">💡 Hint</button>
                 </div>
             </div>
             <div id="endGameStats" class="end-game-stats" style="display: none;">

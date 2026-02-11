@@ -167,6 +167,7 @@ Works best in modern browsers (Chrome, Firefox, Safari, Edge) that support:
 
 ## Version History
 
+- **v1.5**: Hint button (reveal random word, orange styling); end-game messages by completion % (Perfection! to encouraging); last-revealed word in center (guess=purple, hint=orange); Next Song pulse animation; songs list updated
 - **v1.4**: Artist mode preload priority; surprise preload continues when artist queue is full and when returning to lobby; songs data refreshed
 - **v1.3**: End-of-game stats replace guess area on victory/give up; year only in Surprise Me; lobby button fixes
 - **v1.2**: Curated song list (songs-by-year.json), embedded list for local + live, Surprise Me uses curated list, preload limit 5
