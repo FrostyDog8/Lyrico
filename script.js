@@ -4,15 +4,38 @@ let devMode = false;
 // Analytics (GA4) – free, no server. Set your Measurement ID from https://analytics.google.com/
 const GA_MEASUREMENT_ID = 'G-KRL1CS0CF1'; // e.g. 'G-XXXXXXXXXX' – leave empty to disable
 const GA_CLIENT_ID_KEY = 'lf_ga_cid';
+function getGaClientIdFromCookie() {
+    try {
+        const match = document.cookie.match(/_ga=([^;]+)/);
+        if (match && match[1]) {
+            const parts = match[1].split('.');
+            if (parts.length >= 2) {
+                const a = parts[parts.length - 2], b = parts[parts.length - 1];
+                if (/^\d+$/.test(a) && /^\d+$/.test(b)) return a + '.' + b;
+            }
+        }
+    } catch (_) {}
+    return null;
+}
+function generateGaStyleClientId() {
+    const r = () => Math.floor(Math.random() * 1e10).toString();
+    return r() + '.' + (Math.floor(Date.now() / 1000)).toString();
+}
 function getOrCreateGaClientId() {
+    const valid = (id) => id && /^[a-zA-Z0-9._-]+$/.test(id) && id.length >= 10;
     try {
         let id = localStorage.getItem(GA_CLIENT_ID_KEY);
-        if (id && /^[a-zA-Z0-9._-]+$/.test(id)) return id;
-        id = Math.random().toString(36).slice(2) + '.' + Math.random().toString(36).slice(2) + '.' + Date.now();
+        if (valid(id)) return id;
+        id = getGaClientIdFromCookie();
+        if (valid(id)) {
+            localStorage.setItem(GA_CLIENT_ID_KEY, id);
+            return id;
+        }
+        id = generateGaStyleClientId();
         localStorage.setItem(GA_CLIENT_ID_KEY, id);
         return id;
     } catch (_) {
-        return Math.random().toString(36).slice(2) + '.' + Date.now();
+        return getGaClientIdFromCookie() || generateGaStyleClientId();
     }
 }
 function initAnalytics() {
