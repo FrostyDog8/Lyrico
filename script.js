@@ -169,7 +169,7 @@ async function spotifyApi(method, path, accessToken) {
         throw new Error('Spotify session expired. Please connect again.');
     }
     if (res.status === 403) {
-        throw new Error('Access denied. Disconnect and connect again to grant playlist access.');
+        throw new Error('Access denied.');
     }
     if (!res.ok) throw new Error('Spotify API error: ' + res.status);
     return res.json();
@@ -220,11 +220,12 @@ async function spotifyFetchPlaylistTracks(playlistId) {
     const out = [];
     let offset = 0;
     const limit = 50;
+    const id = encodeURIComponent(playlistId);
     while (true) {
-        const data = await spotifyApi('GET', `/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${limit}&offset=${offset}`);
+        const data = await spotifyApi('GET', `/playlists/${id}/items?limit=${limit}&offset=${offset}`);
         const items = data.items || [];
         for (const it of items) {
-            const t = it.track || it.item;
+            const t = it.item || it.track;
             if (t && (t.type === 'track' || !t.type) && t.name && t.artists && t.artists.length) {
                 out.push({ title: t.name.trim(), artist: (t.artists[0].name || '').trim() });
             }
