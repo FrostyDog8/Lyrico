@@ -3,13 +3,25 @@ let devMode = false;
 
 // Analytics (GA4) – free, no server. Set your Measurement ID from https://analytics.google.com/
 const GA_MEASUREMENT_ID = 'G-KRL1CS0CF1'; // e.g. 'G-XXXXXXXXXX' – leave empty to disable
+const GA_CLIENT_ID_KEY = 'lf_ga_cid';
+function getOrCreateGaClientId() {
+    try {
+        let id = localStorage.getItem(GA_CLIENT_ID_KEY);
+        if (id && /^[a-zA-Z0-9._-]+$/.test(id)) return id;
+        id = Math.random().toString(36).slice(2) + '.' + Math.random().toString(36).slice(2) + '.' + Date.now();
+        localStorage.setItem(GA_CLIENT_ID_KEY, id);
+        return id;
+    } catch (_) {
+        return Math.random().toString(36).slice(2) + '.' + Date.now();
+    }
+}
 function initAnalytics() {
     if (!GA_MEASUREMENT_ID) return;
     window.dataLayer = window.dataLayer || [];
     function gtag() { dataLayer.push(arguments); }
     window.gtag = gtag;
     gtag('js', new Date());
-    gtag('config', GA_MEASUREMENT_ID);
+    gtag('config', GA_MEASUREMENT_ID, { client_id: getOrCreateGaClientId() });
     const s = document.createElement('script');
     s.async = true;
     s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID;
