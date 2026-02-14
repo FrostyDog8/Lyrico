@@ -55,10 +55,13 @@ onDomReady(() => {
     const wordInput = document.getElementById('wordInput');
     const playAgainBtn = document.getElementById('playAgainBtn');
     const devModeBtn = document.getElementById('devModeBtn');
-    
-    // Dev mode toggle
+    const hasDevSecret = typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH;
     if (devModeBtn) {
-        devModeBtn.addEventListener('click', toggleDevMode);
+        if (!hasDevSecret) {
+            devModeBtn.style.display = 'none';
+        } else {
+            devModeBtn.addEventListener('click', toggleDevMode);
+        }
     }
     try {
         updateDevModeUI();
@@ -379,12 +382,12 @@ function toggleDevMode() {
         updateDevModeUI();
         return;
     }
+    const password = prompt('Dev mode password:');
+    if (password == null) return;
     const hash = typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH;
     if (!hash) {
         return;
     }
-    const password = prompt('Dev mode password:');
-    if (password == null) return;
     sha256Hex(password).then(hashed => {
         if (hashed.toLowerCase() === String(hash).toLowerCase()) {
             devMode = true;
@@ -404,8 +407,7 @@ function updateDevModeUI() {
     const failedSongsDiv = document.getElementById('failedSongs');
     const failedSongsDivGame = document.getElementById('failedSongsGame');
     
-    // Update button appearance
-    if (devModeBtn) {
+    if (devModeBtn && typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH) {
         if (devMode) {
             devModeBtn.classList.add('active');
             devModeBtn.textContent = '🔧 ON';
