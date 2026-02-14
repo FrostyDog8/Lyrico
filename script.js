@@ -65,7 +65,8 @@ const SPOTIFY_STATE_KEY = 'lf_spotify_state';
 function getSpotifyRedirectUri() {
     if (typeof window === 'undefined' || !window.location) return 'http://127.0.0.1:8080';
     const o = window.location;
-    return o.origin + o.pathname.replace(/\/?$/, '');
+    const path = o.pathname.replace(/\/?$/, '') || '/';
+    return o.origin + path + (path === '/' ? '' : '/');
 }
 
 async function spotifySha256(plain) {
@@ -291,6 +292,7 @@ onDomReady(() => {
         if (savedState === state) {
             spotifyExchangeCode(code).then(() => {
                 window.history.replaceState({}, document.title, window.location.pathname || '/');
+                if (typeof window.updateSpotifyButtonText === 'function') window.updateSpotifyButtonText();
                 openSpotifyPlaylistPicker();
             }).catch(err => {
                 showError(err.message || 'Spotify login failed');
@@ -300,7 +302,13 @@ onDomReady(() => {
     }
 
     const spotifyConnectBtn = document.getElementById('spotifyConnectBtn');
+    function updateSpotifyButtonText() {
+        if (!spotifyConnectBtn) return;
+        spotifyConnectBtn.textContent = spotifyGetStoredToken() ? '🎧 Pick a playlist' : '🎧 Connect & pick playlist';
+        spotifyConnectBtn.disabled = false;
+    }
     if (spotifyConnectBtn) {
+        updateSpotifyButtonText();
         spotifyConnectBtn.addEventListener('click', () => {
             if (spotifyGetStoredToken()) openSpotifyPlaylistPicker();
             else spotifyLogin();
@@ -311,6 +319,12 @@ onDomReady(() => {
     if (cancelSpotifyPlaylistBtn && spotifyPlaylistOverlay) {
         cancelSpotifyPlaylistBtn.addEventListener('click', () => { spotifyPlaylistOverlay.style.display = 'none'; });
     }
+    if (spotifyPlaylistOverlay) {
+        spotifyPlaylistOverlay.addEventListener('click', (e) => {
+            if (e.target === spotifyPlaylistOverlay) spotifyPlaylistOverlay.style.display = 'none';
+        });
+    }
+    window.updateSpotifyButtonText = updateSpotifyButtonText;
 
     const wordInput = document.getElementById('wordInput');
     const playAgainBtn = document.getElementById('playAgainBtn');
@@ -1681,32 +1695,44 @@ function openSpotifyPlaylistPicker() {
     const overlay = document.getElementById('spotifyPlaylistOverlay');
     const listEl = document.getElementById('spotifyPlaylistList');
     if (!overlay || !listEl) return;
-    listEl.innerHTML = '<li class="song-list-loading">Loading playlists…</li>';
+    listEl.innerHTML = '<div class="song-list-loading">Loading playlists…</div>';
     overlay.style.display = 'flex';
     Promise.all([spotifyFetchPlaylists()]).then(([playlists]) => {
         listEl.innerHTML = '';
-        const liked = document.createElement('button');
-        liked.className = 'song-list-item';
-        liked.textContent = '❤️ Liked Songs';
-        liked.type = 'button';
-        liked.addEventListener('click', () => {
+        const likedItem = document.createElement('div');
+        likedItem.className = 'song-item';
+        likedItem.innerHTML = '<div class="song-item-info"><strong>❤️ Liked Songs</strong><span class="song-artist">Your saved tracks</span></div>';
+        likedItem.addEventListener('click', () => {
             overlay.style.display = 'none';
             startSpotifyWithLikedSongs();
         });
-        listEl.appendChild(liked);
+        listEl.appendChild(likedItem);
         for (const p of playlists) {
-            const btn = document.createElement('button');
-            btn.className = 'song-list-item';
-            btn.textContent = p.name + (p.tracksTotal ? ` (${p.tracksTotal})` : '');
-            btn.type = 'button';
-            btn.addEventListener('click', () => {
+            const item = document.createElement('div');
+            item.className = 'song-item';
+            const count = (p.tracksTotal != null && p.tracksTotal >= 0) ? p.tracksTotal : 0;
+            const info = document.createElement('div');
+            info.className = 'song-item-info';
+            const strong = document.createElement('strong');
+            strong.textContent = p.name;
+            const span = document.createElement('span');
+            span.className = 'song-artist';
+            span.textContent = count + ' song' + (count !== 1 ? 's' : '');
+            info.appendChild(strong);
+            info.appendChild(span);
+            item.appendChild(info);
+            item.addEventListener('click', () => {
                 overlay.style.display = 'none';
                 startSpotifyWithPlaylist(p.id, p.name);
             });
-            listEl.appendChild(btn);
+            listEl.appendChild(item);
         }
     }).catch(err => {
-        listEl.innerHTML = '<li class="song-list-error">' + (err.message || 'Failed to load') + '</li>';
+        const errEl = document.createElement('div');
+        errEl.className = 'song-list-error';
+        errEl.textContent = err.message || 'Failed to load';
+        listEl.innerHTML = '';
+        listEl.appendChild(errEl);
     });
 }
 
@@ -1724,8 +1750,9 @@ async function startSpotifyWithLikedSongs() {
         await pickAndLoadFirstSpotifySong();
     } catch (e) {
         showError(e.message || 'Failed to load Liked Songs');
+    } finally {
+        if (btn) { if (typeof window.updateSpotifyButtonText === 'function') window.updateSpotifyButtonText(); else { btn.textContent = '🎧 Pick a playlist'; btn.disabled = false; } }
     }
-    if (btn) { btn.innerHTML = '🎧 Connect & pick playlist'; btn.disabled = false; }
 }
 
 async function startSpotifyWithPlaylist(playlistId, playlistName) {
@@ -1742,8 +1769,9 @@ async function startSpotifyWithPlaylist(playlistId, playlistName) {
         await pickAndLoadFirstSpotifySong();
     } catch (e) {
         showError(e.message || 'Failed to load playlist');
+    } finally {
+        if (btn) { if (typeof window.updateSpotifyButtonText === 'function') window.updateSpotifyButtonText(); else { btn.textContent = '🎧 Pick a playlist'; btn.disabled = false; } }
     }
-    if (btn) { btn.innerHTML = '🎧 Connect & pick playlist'; btn.disabled = false; }
 }
 
 function getSpotifyRemainingTracks() {

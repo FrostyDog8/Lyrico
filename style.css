@@ -1338,6 +1338,17 @@ header h1 {
     font-size: 0.95em;
 }
 
+.song-list-loading,
+.song-list-error {
+    padding: 20px;
+    text-align: center;
+    color: #666;
+}
+
+.song-list-error {
+    color: #c0392b;
+}
+
 .song-album {
     color: #999;
     font-size: 0.85em;
