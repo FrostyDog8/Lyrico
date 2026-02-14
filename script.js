@@ -183,7 +183,7 @@ async function spotifyFetchPlaylists() {
         const items = data.items || [];
         for (const p of items) {
             let total = 0;
-            if (p.tracks && typeof p.tracks.total === 'number') total = p.tracks.total;
+            if (p.tracks && p.tracks.total != null) total = Number(p.tracks.total) || 0;
             out.push({ id: p.id, name: p.name || 'Unnamed', tracksTotal: total });
         }
         url = data.next || '';
