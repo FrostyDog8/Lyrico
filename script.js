@@ -55,6 +55,176 @@ function trackEvent(name, params) {
     window.gtag('event', name, params);
 }
 
+// Spotify (optional) – set Client ID from https://developer.spotify.com/dashboard ; add Redirect URI in app settings (e.g. your site origin or http://127.0.0.1:8080 for local)
+const SPOTIFY_CLIENT_ID = 'bd59563fe9e24de2826f2c575df7f508'; // leave empty to hide Spotify mode
+const SPOTIFY_SCOPES = 'playlist-read-private user-library-read';
+const SPOTIFY_STORAGE_KEY = 'lf_spotify_token';
+const SPOTIFY_VERIFIER_KEY = 'lf_spotify_code_verifier';
+const SPOTIFY_STATE_KEY = 'lf_spotify_state';
+
+function getSpotifyRedirectUri() {
+    if (typeof window === 'undefined' || !window.location) return 'http://127.0.0.1:8080';
+    const o = window.location;
+    return o.origin + o.pathname.replace(/\/?$/, '');
+}
+
+async function spotifySha256(plain) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(plain);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return hash;
+}
+
+function spotifyBase64UrlEncode(buffer) {
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+}
+
+function spotifyGenerateRandomString(length) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const values = crypto.getRandomValues(new Uint8Array(length));
+    return values.reduce((acc, x) => acc + possible[x % possible.length], '');
+}
+
+function spotifyLogin() {
+    if (!SPOTIFY_CLIENT_ID) return;
+    const state = spotifyGenerateRandomString(32);
+    const codeVerifier = spotifyGenerateRandomString(64);
+    spotifySha256(codeVerifier).then((hashed) => {
+        const codeChallenge = spotifyBase64UrlEncode(hashed);
+        try {
+            localStorage.setItem(SPOTIFY_VERIFIER_KEY, codeVerifier);
+            sessionStorage.setItem(SPOTIFY_STATE_KEY, state);
+        } catch (_) {}
+        const redirectUri = getSpotifyRedirectUri();
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: SPOTIFY_CLIENT_ID,
+            scope: SPOTIFY_SCOPES,
+            redirect_uri: redirectUri,
+            state,
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge
+        });
+        window.location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+    });
+}
+
+async function spotifyExchangeCode(code) {
+    const codeVerifier = localStorage.getItem(SPOTIFY_VERIFIER_KEY);
+    if (!codeVerifier) throw new Error('Missing code verifier');
+    const redirectUri = getSpotifyRedirectUri();
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: SPOTIFY_CLIENT_ID,
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri,
+            code_verifier: codeVerifier
+        })
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Token exchange failed');
+    }
+    const data = await res.json();
+    try {
+        localStorage.removeItem(SPOTIFY_VERIFIER_KEY);
+        sessionStorage.setItem(SPOTIFY_STORAGE_KEY, JSON.stringify({
+            access_token: data.access_token,
+            expires_at: Date.now() + (data.expires_in || 3600) * 1000,
+            refresh_token: data.refresh_token || null
+        }));
+    } catch (_) {}
+    return data.access_token;
+}
+
+function spotifyGetStoredToken() {
+    try {
+        const raw = sessionStorage.getItem(SPOTIFY_STORAGE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (data.expires_at && Date.now() < data.expires_at - 60000) return data.access_token;
+        return null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function spotifyApi(method, path, accessToken) {
+    const token = accessToken || spotifyGetStoredToken();
+    if (!token) throw new Error('Not logged in to Spotify');
+    const url = path.startsWith('http') ? path : 'https://api.spotify.com/v1' + path;
+    const res = await fetch(url, {
+        method: method || 'GET',
+        headers: { Authorization: 'Bearer ' + token }
+    });
+    if (res.status === 401) {
+        try { sessionStorage.removeItem(SPOTIFY_STORAGE_KEY); } catch (_) {}
+        throw new Error('Spotify session expired. Please connect again.');
+    }
+    if (!res.ok) throw new Error('Spotify API error: ' + res.status);
+    return res.json();
+}
+
+async function spotifyFetchPlaylists() {
+    const out = [];
+    let url = '/me/playlists?limit=50';
+    while (url) {
+        const path = url.startsWith('http') ? url : 'https://api.spotify.com/v1' + url;
+        const res = await fetch(path, {
+            headers: { Authorization: 'Bearer ' + spotifyGetStoredToken() }
+        });
+        if (!res.ok) throw new Error('Failed to load playlists');
+        const data = await res.json();
+        out.push(...(data.items || []).map(p => ({ id: p.id, name: p.name || 'Unnamed', tracksTotal: (p.tracks && p.tracks.total) != null ? p.tracks.total : 0 })));
+        url = data.next || '';
+    }
+    return out;
+}
+
+async function spotifyFetchLikedTracks() {
+    const out = [];
+    let offset = 0;
+    const limit = 50;
+    while (true) {
+        const data = await spotifyApi('GET', `/me/tracks?limit=${limit}&offset=${offset}`);
+        const items = data.items || [];
+        for (const it of items) {
+            const t = it.track;
+            if (t && t.type === 'track' && t.name && t.artists && t.artists.length) {
+                out.push({ title: t.name.trim(), artist: (t.artists[0].name || '').trim() });
+            }
+        }
+        if (!data.next) break;
+        offset += limit;
+    }
+    return out;
+}
+
+async function spotifyFetchPlaylistTracks(playlistId) {
+    const out = [];
+    let offset = 0;
+    const limit = 50;
+    while (true) {
+        const data = await spotifyApi('GET', `/playlists/${encodeURIComponent(playlistId)}/tracks?limit=${limit}&offset=${offset}`);
+        const items = data.items || [];
+        for (const it of items) {
+            const t = it.track || it.item;
+            if (t && (t.type === 'track' || !t.type) && t.name && t.artists && t.artists.length) {
+                out.push({ title: t.name.trim(), artist: (t.artists[0].name || '').trim() });
+            }
+        }
+        if (items.length < limit) break;
+        offset += limit;
+    }
+    return out;
+}
+
 // Game state
 let gameState = {
     lyrics: [],
@@ -76,7 +246,11 @@ let gameState = {
     surpriseArtistName: '', // When set, Next Song picks another random song by this artist (full name for display and for searching more songs)
     requestedArtistName: '', // The original artist name requested by user (for searching)
     artistModeDisplayName: '', // Resolved artist name for banner (e.g. "Imagine Dragons" when user searched "imagine drag"), no collab
-    hintRevealedIndices: new Set() // Indices of word slots revealed by hint (not counted as "found" in summary)
+    hintRevealedIndices: new Set(), // Indices of word slots revealed by hint (not counted as "found" in summary)
+    // Spotify mode: when set, Next Song pulls from this playlist
+    spotifyPlaylistName: '',
+    spotifyPlaylistId: null, // null = Liked Songs
+    spotifyTracks: [] // { title, artist }[]
 };
 
 // Initialize the game – attach lobby buttons so they always work
@@ -105,6 +279,38 @@ function onDomReady(fn) {
 onDomReady(() => {
     initAnalytics();
     initLobbyButtons();
+
+    // Spotify: show card only if configured; handle OAuth callback
+    const spotifyModeCard = document.getElementById('spotifyModeCard');
+    if (spotifyModeCard) spotifyModeCard.style.display = SPOTIFY_CLIENT_ID ? 'block' : 'none';
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    if (SPOTIFY_CLIENT_ID && code && state) {
+        const savedState = sessionStorage.getItem(SPOTIFY_STATE_KEY);
+        if (savedState === state) {
+            spotifyExchangeCode(code).then(() => {
+                window.history.replaceState({}, document.title, window.location.pathname || '/');
+                openSpotifyPlaylistPicker();
+            }).catch(err => {
+                showError(err.message || 'Spotify login failed');
+                window.history.replaceState({}, document.title, window.location.pathname || '/');
+            });
+        }
+    }
+
+    const spotifyConnectBtn = document.getElementById('spotifyConnectBtn');
+    if (spotifyConnectBtn) {
+        spotifyConnectBtn.addEventListener('click', () => {
+            if (spotifyGetStoredToken()) openSpotifyPlaylistPicker();
+            else spotifyLogin();
+        });
+    }
+    const cancelSpotifyPlaylistBtn = document.getElementById('cancelSpotifyPlaylistBtn');
+    const spotifyPlaylistOverlay = document.getElementById('spotifyPlaylistOverlay');
+    if (cancelSpotifyPlaylistBtn && spotifyPlaylistOverlay) {
+        cancelSpotifyPlaylistBtn.addEventListener('click', () => { spotifyPlaylistOverlay.style.display = 'none'; });
+    }
 
     const wordInput = document.getElementById('wordInput');
     const playAgainBtn = document.getElementById('playAgainBtn');
@@ -201,8 +407,13 @@ onDomReady(() => {
         gameState.surpriseArtistName = '';
         gameState.requestedArtistName = '';
         gameState.artistModeDisplayName = '';
+        gameState.spotifyPlaylistName = '';
+        gameState.spotifyPlaylistId = null;
+        gameState.spotifyTracks = [];
         preloadedArtistSongs = [];
         preloadedArtistName = '';
+        preloadedSpotifySongs = [];
+        spotifyPlayedInSession.clear();
         preloadNextSurpriseSong(); // resume regular surprise preload when returning to lobby
         gameState.titleRevealed = false;
         gameState.yearRevealed = false;
@@ -213,9 +424,13 @@ onDomReady(() => {
         const helpGameplayBtnGame = document.getElementById('helpGameplayBtnGame');
         if (helpGameplayBtnGame) helpGameplayBtnGame.style.display = 'none';
         
-        // Hide artist mode banner
+        // Hide artist and Spotify mode banners
         const artistModeBanner = document.getElementById('artistModeBanner');
         if (artistModeBanner) artistModeBanner.style.display = 'none';
+        const spotifyModeBanner = document.getElementById('spotifyModeBanner');
+        if (spotifyModeBanner) spotifyModeBanner.style.display = 'none';
+        const spotifyPlaylistEndMessage = document.getElementById('spotifyPlaylistEndMessage');
+        if (spotifyPlaylistEndMessage) spotifyPlaylistEndMessage.style.display = 'none';
         
         // Reset UI elements
         const revealTitleBtn = document.getElementById('revealTitleBtn');
@@ -319,6 +534,23 @@ onDomReady(() => {
                     <li>Use "Next Song" to get another song by the same artist</li>
                 </ul>
                 <p>Perfect for testing your knowledge of a specific artist!</p>
+            `);
+        });
+    }
+    const helpSpotifyBtn = document.getElementById('helpSpotifyBtn');
+    if (helpSpotifyBtn) {
+        helpSpotifyBtn.addEventListener('click', () => {
+            showHelp('Play from Spotify', `
+                <p><strong>Play from Spotify</strong> uses your Spotify account to play songs from a playlist or your Liked Songs.</p>
+                <h4>How it works:</h4>
+                <ul>
+                    <li>Click "Connect & pick playlist" and log in with Spotify if needed</li>
+                    <li>Choose "Liked Songs" or any of your playlists</li>
+                    <li>Songs play in random order; the title is hidden until you complete the lyrics</li>
+                    <li>Use "Next Song" to get another track from the same playlist</li>
+                    <li>When the playlist runs out, you'll see a message—head back to pick another playlist</li>
+                </ul>
+                <p>Lyrics are loaded from our sources when available; some tracks may be skipped if lyrics aren't found.</p>
             `);
         });
     }
@@ -1114,6 +1346,11 @@ let preloadedArtistSongs = []; // { title, artist, lyrics }[]
 let preloadedArtistName = '';
 let preloadArtistInProgress = false;
 
+// Spotify mode: tracks we've already played in this playlist session (keys "title_artist")
+let spotifyPlayedInSession = new Set();
+let preloadedSpotifySongs = []; // { title, artist, lyrics }[] same as artist preload
+let preloadSpotifyInProgress = false;
+
 /** Update dev-mode preload counter (visibility + count). Call whenever queue changes or dev mode toggles. */
 function updatePreloadCounter() {
     const el = document.getElementById('preloadCounter');
@@ -1246,16 +1483,65 @@ function playSongRefreshAnimation() {
     setTimeout(() => container.classList.remove('song-refresh'), 460);
 }
 
-/** Load next surprise song (only in surprise game). Uses preload if ready, else fetches one. When surpriseArtistName is set, picks from that artist. */
+/** Load next surprise song (only in surprise game). Uses preload if ready, else fetches one. When surpriseArtistName is set, picks from that artist. Spotify mode: picks from playlist or shows "playlist end" message. */
 async function nextSurpriseSong() {
     if (!gameState.isSurpriseSong) return;
-    const byArtist = gameState.surpriseArtistName && gameState.surpriseArtistName.trim();
-    trackEvent('next_song', { mode: byArtist ? 'surprise_artist' : 'surprise' });
     const nextSongBtn = document.getElementById('nextSongBtn');
     if (!nextSongBtn) return;
+    const spotifyPlaylistEndMessage = document.getElementById('spotifyPlaylistEndMessage');
+    const bySpotify = gameState.spotifyPlaylistName && gameState.spotifyPlaylistName.trim();
+    const byArtist = !bySpotify && gameState.surpriseArtistName && gameState.surpriseArtistName.trim();
+
+    trackEvent('next_song', { mode: bySpotify ? 'spotify' : (byArtist ? 'surprise_artist' : 'surprise') });
     nextSongBtn.innerHTML = 'Loading... <span class="loading"></span>';
     nextSongBtn.disabled = true;
+    if (spotifyPlaylistEndMessage) spotifyPlaylistEndMessage.style.display = 'none';
     resetVictoryUI();
+
+    if (bySpotify) {
+        const preloaded = takePreloadedSpotifySong();
+        if (preloaded && preloaded.lyrics && preloaded.lyrics.trim().length >= 50) {
+            initializeGame(preloaded.lyrics, preloaded.title, preloaded.artist, true, null, null, null, preloaded.isHebrew || false);
+            updateFailedSongsDisplay(globalFailedSongs);
+            document.getElementById('gameArea').style.display = 'block';
+            const wordInputEl = document.getElementById('wordInput');
+            if (wordInputEl) wordInputEl.focus();
+            updateDevModeUI();
+            preloadNextSpotifySong();
+            nextSongBtn.innerHTML = 'Next Song →';
+            nextSongBtn.disabled = false;
+            playSongRefreshAnimation();
+            return;
+        }
+        const track = pickNextSpotifyTrack();
+        if (!track) {
+            nextSongBtn.style.display = 'none';
+            if (spotifyPlaylistEndMessage) spotifyPlaylistEndMessage.style.display = 'block';
+            nextSongBtn.innerHTML = 'Next Song →';
+            nextSongBtn.disabled = false;
+            return;
+        }
+        try {
+            const lyrics = await fetchLyrics(track.title, track.artist);
+            if (!lyrics || lyrics.trim().length < 50) throw new Error('No lyrics');
+            if (!usesOnlyEnglishAlphabet(lyrics) && !isHebrew(lyrics)) throw new Error('Lyrics use unsupported characters.');
+            initializeGame(lyrics, track.title, track.artist, true, null, null, null, isHebrew(lyrics));
+            updateFailedSongsDisplay(globalFailedSongs);
+            document.getElementById('gameArea').style.display = 'block';
+            const wordInputEl = document.getElementById('wordInput');
+            if (wordInputEl) wordInputEl.focus();
+            updateDevModeUI();
+            preloadNextSpotifySong();
+            playSongRefreshAnimation();
+        } catch (err) {
+            console.error('Next Spotify song failed:', err);
+            spotifyPlayedInSession.delete(`${track.title.toLowerCase()}_${track.artist.toLowerCase()}`);
+            showError(err.message || 'Could not load lyrics for this song.');
+        }
+        nextSongBtn.innerHTML = 'Next Song →';
+        nextSongBtn.disabled = false;
+        return;
+    }
 
     if (!byArtist) {
         const preloaded = takePreloadedSong();
@@ -1389,6 +1675,154 @@ function updateFailedSongsDisplay(failedSongs) {
     if (failedSongsDivGame) {
         failedSongsDivGame.style.display = shouldShow ? 'block' : 'none';
     }
+}
+
+function openSpotifyPlaylistPicker() {
+    const overlay = document.getElementById('spotifyPlaylistOverlay');
+    const listEl = document.getElementById('spotifyPlaylistList');
+    if (!overlay || !listEl) return;
+    listEl.innerHTML = '<li class="song-list-loading">Loading playlists…</li>';
+    overlay.style.display = 'flex';
+    Promise.all([spotifyFetchPlaylists()]).then(([playlists]) => {
+        listEl.innerHTML = '';
+        const liked = document.createElement('button');
+        liked.className = 'song-list-item';
+        liked.textContent = '❤️ Liked Songs';
+        liked.type = 'button';
+        liked.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            startSpotifyWithLikedSongs();
+        });
+        listEl.appendChild(liked);
+        for (const p of playlists) {
+            const btn = document.createElement('button');
+            btn.className = 'song-list-item';
+            btn.textContent = p.name + (p.tracksTotal ? ` (${p.tracksTotal})` : '');
+            btn.type = 'button';
+            btn.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                startSpotifyWithPlaylist(p.id, p.name);
+            });
+            listEl.appendChild(btn);
+        }
+    }).catch(err => {
+        listEl.innerHTML = '<li class="song-list-error">' + (err.message || 'Failed to load') + '</li>';
+    });
+}
+
+async function startSpotifyWithLikedSongs() {
+    const btn = document.getElementById('spotifyConnectBtn');
+    if (btn) { btn.innerHTML = 'Loading Liked Songs… <span class="loading"></span>'; btn.disabled = true; }
+    try {
+        const tracks = await spotifyFetchLikedTracks();
+        if (!tracks.length) { showError('No tracks in Liked Songs'); return; }
+        gameState.spotifyPlaylistId = null;
+        gameState.spotifyPlaylistName = 'Liked Songs';
+        gameState.spotifyTracks = tracks;
+        spotifyPlayedInSession.clear();
+        preloadedSpotifySongs = [];
+        await pickAndLoadFirstSpotifySong();
+    } catch (e) {
+        showError(e.message || 'Failed to load Liked Songs');
+    }
+    if (btn) { btn.innerHTML = '🎧 Connect & pick playlist'; btn.disabled = false; }
+}
+
+async function startSpotifyWithPlaylist(playlistId, playlistName) {
+    const btn = document.getElementById('spotifyConnectBtn');
+    if (btn) { btn.innerHTML = 'Loading playlist… <span class="loading"></span>'; btn.disabled = true; }
+    try {
+        const tracks = await spotifyFetchPlaylistTracks(playlistId);
+        if (!tracks.length) { showError('Playlist is empty or could not load tracks'); return; }
+        gameState.spotifyPlaylistId = playlistId;
+        gameState.spotifyPlaylistName = playlistName || 'Playlist';
+        gameState.spotifyTracks = tracks;
+        spotifyPlayedInSession.clear();
+        preloadedSpotifySongs = [];
+        await pickAndLoadFirstSpotifySong();
+    } catch (e) {
+        showError(e.message || 'Failed to load playlist');
+    }
+    if (btn) { btn.innerHTML = '🎧 Connect & pick playlist'; btn.disabled = false; }
+}
+
+function getSpotifyRemainingTracks() {
+    return gameState.spotifyTracks.filter(t => !spotifyPlayedInSession.has(`${t.title.toLowerCase()}_${t.artist.toLowerCase()}`));
+}
+
+function pickNextSpotifyTrack() {
+    const remaining = getSpotifyRemainingTracks();
+    if (!remaining.length) return null;
+    const chosen = remaining[Math.floor(Math.random() * remaining.length)];
+    spotifyPlayedInSession.add(`${chosen.title.toLowerCase()}_${chosen.artist.toLowerCase()}`);
+    return chosen;
+}
+
+async function pickAndLoadFirstSpotifySong() {
+    const track = pickNextSpotifyTrack();
+    if (!track) { showError('No songs in playlist'); return; }
+    const startBtn = document.getElementById('startBtn');
+    const surpriseBtn = document.getElementById('surpriseBtn');
+    const surpriseByArtistBtn = document.getElementById('surpriseByArtistBtn');
+    if (startBtn) startBtn.disabled = true;
+    if (surpriseBtn) surpriseBtn.disabled = true;
+    if (surpriseByArtistBtn) surpriseByArtistBtn.disabled = true;
+    try {
+        const lyrics = await fetchLyrics(track.title, track.artist);
+        if (!lyrics || lyrics.trim().length < 50) throw new Error('No lyrics');
+        if (!usesOnlyEnglishAlphabet(lyrics) && !isHebrew(lyrics)) throw new Error('Lyrics use unsupported characters.');
+        gameState.surpriseArtistName = '';
+        initializeGame(lyrics, track.title, track.artist, true, null, null, null, isHebrew(lyrics));
+        document.getElementById('gameSetup').style.display = 'none';
+        document.getElementById('gameArea').style.display = 'block';
+        const songSelectionOverlay = document.getElementById('songSelectionOverlay');
+        if (songSelectionOverlay) songSelectionOverlay.style.display = 'none';
+        updateFailedSongsDisplay(globalFailedSongs);
+        const wordInputEl = document.getElementById('wordInput');
+        if (wordInputEl) wordInputEl.focus();
+        updateDevModeUI();
+        preloadNextSpotifySong();
+    } catch (err) {
+        console.error('First Spotify song failed:', err);
+        showError(err.message || 'Could not load lyrics for this song.');
+        const remaining = getSpotifyRemainingTracks();
+        if (remaining.length) {
+            spotifyPlayedInSession.delete(`${track.title.toLowerCase()}_${track.artist.toLowerCase()}`);
+            pickAndLoadFirstSpotifySong();
+        }
+    }
+    if (startBtn) startBtn.disabled = false;
+    if (surpriseBtn) surpriseBtn.disabled = false;
+    if (surpriseByArtistBtn) surpriseByArtistBtn.disabled = false;
+}
+
+function preloadNextSpotifySong() {
+    if (preloadedSpotifySongs.length >= PRELOAD_QUEUE_MAX || preloadSpotifyInProgress || !gameState.spotifyPlaylistName) return;
+    const remaining = getSpotifyRemainingTracks();
+    if (!remaining.length) return;
+    preloadSpotifyInProgress = true;
+    const chosen = remaining[Math.floor(Math.random() * remaining.length)];
+    const key = `${chosen.title.toLowerCase()}_${chosen.artist.toLowerCase()}`;
+    spotifyPlayedInSession.add(key);
+    let added = false;
+    fetchLyrics(chosen.title, chosen.artist)
+        .then(lyrics => {
+            if (lyrics && lyrics.trim().length >= 50 && (usesOnlyEnglishAlphabet(lyrics) || isHebrew(lyrics))) {
+                preloadedSpotifySongs.push({ title: chosen.title, artist: chosen.artist, lyrics, isHebrew: isHebrew(lyrics) });
+                added = true;
+            }
+        })
+        .catch(() => {})
+        .finally(() => {
+            if (!added) spotifyPlayedInSession.delete(key);
+            preloadSpotifyInProgress = false;
+            if (preloadedSpotifySongs.length < PRELOAD_QUEUE_MAX) preloadNextSpotifySong();
+        });
+}
+
+function takePreloadedSpotifySong() {
+    const song = preloadedSpotifySongs.length > 0 ? preloadedSpotifySongs.shift() : null;
+    return song;
 }
 
 async function surpriseMe() {
@@ -2405,16 +2839,27 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
         });
     }
     
-    // Show/hide artist mode banner
+    // Show/hide artist vs Spotify mode banner
     const artistModeBanner = document.getElementById('artistModeBanner');
     const artistModeName = document.getElementById('artistModeName');
-    if (gameState.surpriseArtistName && gameState.surpriseArtistName.trim()) {
-        if (artistModeBanner) artistModeBanner.style.display = 'block';
-        if (artistModeName) {
-            artistModeName.textContent = gameState.artistModeDisplayName || gameState.requestedArtistName || gameState.surpriseArtistName;
-        }
-    } else {
+    const spotifyModeBanner = document.getElementById('spotifyModeBanner');
+    const spotifyPlaylistNameEl = document.getElementById('spotifyPlaylistName');
+    const spotifyPlaylistEndMessage = document.getElementById('spotifyPlaylistEndMessage');
+    if (spotifyPlaylistEndMessage) spotifyPlaylistEndMessage.style.display = 'none';
+    if (gameState.spotifyPlaylistName && gameState.spotifyPlaylistName.trim()) {
+        if (spotifyModeBanner) spotifyModeBanner.style.display = 'block';
+        if (spotifyPlaylistNameEl) spotifyPlaylistNameEl.textContent = gameState.spotifyPlaylistName;
         if (artistModeBanner) artistModeBanner.style.display = 'none';
+    } else {
+        if (spotifyModeBanner) spotifyModeBanner.style.display = 'none';
+        if (gameState.surpriseArtistName && gameState.surpriseArtistName.trim()) {
+            if (artistModeBanner) artistModeBanner.style.display = 'block';
+            if (artistModeName) {
+                artistModeName.textContent = gameState.artistModeDisplayName || gameState.requestedArtistName || gameState.surpriseArtistName;
+            }
+        } else {
+            if (artistModeBanner) artistModeBanner.style.display = 'none';
+        }
     }
 
     // Update year display (only show in surprise mode, not artist mode or specific song mode)
@@ -2509,10 +2954,12 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
         if (hebrewBanner) { hebrewBanner.style.display = 'none'; }
     }
     
-    const mode = gameState.isSurpriseSong
-        ? (gameState.surpriseArtistName && gameState.surpriseArtistName.trim() ? 'surprise_artist' : 'surprise')
-        : 'choose_song';
-    trackEvent('game_start', { mode: mode, total_words: actualWordCount, song_year: year || undefined });
+    const mode = gameState.spotifyPlaylistName && gameState.spotifyPlaylistName.trim()
+        ? 'spotify'
+        : (gameState.isSurpriseSong
+            ? (gameState.surpriseArtistName && gameState.surpriseArtistName.trim() ? 'surprise_artist' : 'surprise')
+            : 'choose_song');
+    trackEvent('game_start', { mode: mode, total_words: actualWordCount, song_year: year || undefined, playlist: mode === 'spotify' ? gameState.spotifyPlaylistName : undefined });
     console.log(`Game initialized: ${gameState.totalWords} words to find`);
 }
 

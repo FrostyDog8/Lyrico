@@ -25,9 +25,11 @@
                     <div class="mode-icon">🎯</div>
                     <h3>Choose a Song</h3>
                     <p class="mode-description">Pick any song you want to play. Enter the song name and start guessing!</p>
-                    <div class="mode-input-group">
-                        <input type="text" id="songInput" placeholder="e.g., Bohemian Rhapsody">
-                        <button id="startBtn" class="btn btn-primary">Start Game</button>
+                    <div class="game-mode-card-actions">
+                        <div class="mode-input-group">
+                            <input type="text" id="songInput" placeholder="e.g., Bohemian Rhapsody">
+                            <button id="startBtn" class="btn btn-primary">Start Game</button>
+                        </div>
                     </div>
                 </div>
 
@@ -35,19 +37,33 @@
                     <div class="mode-icon">🎲</div>
                     <h3>Surprise Me</h3>
                     <p class="mode-description">Get a random popular song and test your knowledge. The song name is hidden until you complete it!</p>
-                    <button id="surpriseBtn" class="btn btn-secondary">🎲 Surprise Me!</button>
-                    <button id="helpSurpriseBtn" class="btn-help" title="How does Surprise Me work?">?</button>
+                    <div class="game-mode-card-actions">
+                        <button id="surpriseBtn" class="btn btn-secondary">🎲 Surprise Me!</button>
+                        <button id="helpSurpriseBtn" class="btn-help" title="How does Surprise Me work?">?</button>
+                    </div>
                 </div>
 
                 <div class="game-mode-card">
                     <div class="mode-icon">🎤</div>
                     <h3>Surprise by Artist</h3>
                     <p class="mode-description">Get a random song from your favorite artist. Perfect for testing your knowledge of a specific artist!</p>
-                    <div class="mode-input-group">
-                        <input type="text" id="artistInput" placeholder="e.g., Taylor Swift">
-                        <button id="surpriseByArtistBtn" class="btn btn-secondary">🎤 Random Song</button>
+                    <div class="game-mode-card-actions">
+                        <div class="mode-input-group">
+                            <input type="text" id="artistInput" placeholder="e.g., Taylor Swift">
+                            <button id="surpriseByArtistBtn" class="btn btn-secondary">🎤 Random Song</button>
+                        </div>
+                        <button id="helpArtistBtn" class="btn-help" title="How does Surprise by Artist work?">?</button>
                     </div>
-                    <button id="helpArtistBtn" class="btn-help" title="How does Surprise by Artist work?">?</button>
+                </div>
+
+                <div class="game-mode-card" id="spotifyModeCard" style="display: none;">
+                    <div class="mode-icon">🎧</div>
+                    <h3>Play from Spotify</h3>
+                    <p class="mode-description">Connect your Spotify and pick a playlist (or Liked Songs). Play through it like Surprise mode—lyrics are fetched for each track.</p>
+                    <div class="game-mode-card-actions">
+                        <button id="spotifyConnectBtn" class="btn btn-spotify">🎧 Connect & pick playlist</button>
+                        <button id="helpSpotifyBtn" class="btn-help" title="How does Play from Spotify work?">?</button>
+                    </div>
                 </div>
             </div>
             <div id="errorMessage" class="error-message"></div>
@@ -71,12 +87,24 @@
                     <button id="cancelArtistSelectionBtn" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
+            <div id="spotifyPlaylistOverlay" class="song-selection-overlay" style="display: none;">
+                <div id="spotifyPlaylistSelection" class="song-selection">
+                    <h3>Choose a playlist</h3>
+                    <p class="song-selection-subtitle">Songs will play in random order. Lyrics are loaded when available.</p>
+                    <div id="spotifyPlaylistList" class="song-list"></div>
+                    <button id="cancelSpotifyPlaylistBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
         </div>
 
         <div class="game-area" id="gameArea" style="display: none;">
             <div id="artistModeBanner" class="artist-mode-banner" style="display: none;">
                 <span class="artist-mode-icon">🎤</span>
                 <span class="artist-mode-text">Playing songs by: <strong id="artistModeName"></strong></span>
+            </div>
+            <div id="spotifyModeBanner" class="artist-mode-banner" style="display: none;">
+                <span class="artist-mode-icon">🎧</span>
+                <span class="artist-mode-text">Playing from: <strong id="spotifyPlaylistName"></strong></span>
             </div>
             <div id="hebrewSongBanner" class="hebrew-song-banner" style="display: none;">This song is in Hebrew</div>
             <div class="game-area-top-bar">
@@ -94,6 +122,7 @@
                 </div>
                 <div class="game-area-top-right">
                     <button id="nextSongBtn" class="btn btn-secondary next-song-btn" style="display: none;" title="Skip to next random song">Next Song →</button>
+                    <p id="spotifyPlaylistEndMessage" class="spotify-playlist-end" style="display: none;">You've reached the end of this playlist. Head back to pick another!</p>
                 </div>
             </div>
             <div id="failedSongsGame" class="failed-songs" style="display: none;">

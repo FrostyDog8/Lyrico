@@ -107,11 +107,21 @@ header h1 {
 
 .game-modes {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 30px;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 20px 0;
+}
+@media (max-width: 1000px) {
+    .game-modes {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 600px) {
+    .game-modes {
+        grid-template-columns: 1fr;
+    }
 }
 
 .game-mode-card {
@@ -152,6 +162,56 @@ header h1 {
     flex-grow: 1;
 }
 
+.game-mode-card-actions {
+    margin-top: auto;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+/* Exact same size for all lobby main buttons (width and height) */
+.game-mode-card-actions .btn-primary,
+.game-mode-card-actions .btn-secondary,
+.game-mode-card-actions .btn-spotify,
+.game-mode-card-actions #surpriseBtn,
+.game-mode-card-actions #surpriseByArtistBtn {
+    width: 280px;
+    height: 52px;
+    min-width: 280px;
+    min-height: 52px;
+    max-width: 280px;
+    padding: 0 16px;
+    font-size: 1em;
+    font-weight: 700;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+}
+.game-mode-card-actions .mode-input-group {
+    width: 280px;
+    align-self: center;
+}
+.game-mode-card-actions .mode-input-group .btn {
+    width: 280px;
+    min-width: 280px;
+    max-width: 280px;
+    height: 52px;
+    min-height: 52px;
+    padding: 0 16px;
+    font-size: 1em;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .mode-input-group {
     display: flex;
     flex-direction: column;
@@ -179,7 +239,6 @@ header h1 {
 
 .game-mode-card .btn {
     width: 100%;
-    margin-top: auto;
 }
 
 .input-group {
@@ -338,6 +397,15 @@ header h1 {
 .artist-mode-icon {
     font-size: 1.2em;
     margin-right: 8px;
+}
+
+.spotify-playlist-end {
+    font-size: 0.95em;
+    color: #555;
+    margin: 0;
+    padding: 8px 12px;
+    text-align: right;
+    max-width: 280px;
 }
 
 .hebrew-song-banner {
@@ -621,6 +689,26 @@ header h1 {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+.btn-spotify {
+    background: linear-gradient(135deg, #1DB954 0%, #1ed760 100%);
+    color: white;
+    padding: 12px 22px;
+    font-size: 0.95em;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(29, 185, 84, 0.4);
+    transition: all 0.25s ease;
+}
+.btn-spotify:hover {
+    background: linear-gradient(135deg, #1ed760 0%, #1DB954 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(29, 185, 84, 0.45);
+}
+.btn-spotify:active {
+    transform: translateY(0);
+}
+
 #surpriseBtn {
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     color: white;
@@ -875,7 +963,8 @@ header h1 {
 /* Ensure main action buttons in lobby cards are clickable (above help ? button) */
 .game-mode-card .mode-input-group,
 .game-mode-card .btn-primary,
-.game-mode-card .btn-secondary {
+.game-mode-card .btn-secondary,
+.game-mode-card .btn-spotify {
     position: relative;
     z-index: 1;
 }

@@ -15,7 +15,7 @@ The game can send anonymous usage events to **Google Analytics 4** so you can se
 
 ## Events sent
 
-- **game_start** – when a song loads (`mode`: `surprise` | `surprise_artist` | `choose_song`, `total_words`, optional `song_year`)
+- **game_start** – when a song loads (`mode`: `surprise` | `surprise_artist` | `choose_song` | `spotify`, `total_words`, optional `song_year`, optional `playlist` for Spotify)
 - **song_complete** – when the player finishes the song (`completion_pct`: 0–100, `hints_used`: count)
 - **song_give_up** – when the player gives up (`completion_pct`: 0–100, `hints_used`: count)
 - **hint_used** – when the player uses a hint (`words_revealed`: number)
