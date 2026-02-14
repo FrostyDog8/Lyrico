@@ -57,7 +57,7 @@ function trackEvent(name, params) {
 
 // Spotify (optional) – set Client ID from https://developer.spotify.com/dashboard ; add Redirect URI in app settings (e.g. your site origin or http://127.0.0.1:8080 for local)
 const SPOTIFY_CLIENT_ID = 'bd59563fe9e24de2826f2c575df7f508'; // leave empty to hide Spotify mode
-const SPOTIFY_SCOPES = 'playlist-read-private user-library-read';
+const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative user-library-read';
 const SPOTIFY_STORAGE_KEY = 'lf_spotify_token';
 const SPOTIFY_VERIFIER_KEY = 'lf_spotify_code_verifier';
 const SPOTIFY_STATE_KEY = 'lf_spotify_state';
@@ -168,6 +168,9 @@ async function spotifyApi(method, path, accessToken) {
         try { sessionStorage.removeItem(SPOTIFY_STORAGE_KEY); } catch (_) {}
         throw new Error('Spotify session expired. Please connect again.');
     }
+    if (res.status === 403) {
+        throw new Error('Access denied. Disconnect and connect again to grant playlist access.');
+    }
     if (!res.ok) throw new Error('Spotify API error: ' + res.status);
     return res.json();
 }
@@ -176,16 +179,22 @@ async function spotifyFetchPlaylists() {
     const out = [];
     let url = '/me/playlists?limit=50';
     while (url) {
-        const path = url.startsWith('http') ? url : 'https://api.spotify.com/v1' + url;
-        const res = await fetch(path, {
-            headers: { Authorization: 'Bearer ' + spotifyGetStoredToken() }
-        });
-        if (!res.ok) throw new Error('Failed to load playlists');
-        const data = await res.json();
-        out.push(...(data.items || []).map(p => ({ id: p.id, name: p.name || 'Unnamed', tracksTotal: (p.tracks && p.tracks.total) != null ? p.tracks.total : 0 })));
+        const data = await spotifyApi('GET', url);
+        const items = data.items || [];
+        for (const p of items) {
+            let total = 0;
+            if (p.tracks && typeof p.tracks.total === 'number') total = p.tracks.total;
+            out.push({ id: p.id, name: p.name || 'Unnamed', tracksTotal: total });
+        }
         url = data.next || '';
     }
     return out;
+}
+
+/** Returns total number of liked tracks (for display in picker). */
+async function spotifyGetLikedTracksTotal() {
+    const data = await spotifyApi('GET', '/me/tracks?limit=1');
+    return (data && typeof data.total === 'number') ? data.total : 0;
 }
 
 async function spotifyFetchLikedTracks() {
@@ -1697,11 +1706,15 @@ function openSpotifyPlaylistPicker() {
     if (!overlay || !listEl) return;
     listEl.innerHTML = '<div class="song-list-loading">Loading playlists…</div>';
     overlay.style.display = 'flex';
-    Promise.all([spotifyFetchPlaylists()]).then(([playlists]) => {
+    Promise.all([
+        spotifyFetchPlaylists(),
+        spotifyGetLikedTracksTotal().catch(() => 0)
+    ]).then(([playlists, likedTotal]) => {
         listEl.innerHTML = '';
         const likedItem = document.createElement('div');
         likedItem.className = 'song-item';
-        likedItem.innerHTML = '<div class="song-item-info"><strong>❤️ Liked Songs</strong><span class="song-artist">Your saved tracks</span></div>';
+        const likedCountText = likedTotal > 0 ? (likedTotal + ' song' + (likedTotal !== 1 ? 's' : '')) : 'Your saved tracks';
+        likedItem.innerHTML = '<div class="song-item-info"><strong>❤️ Liked Songs</strong><span class="song-artist">' + likedCountText + '</span></div>';
         likedItem.addEventListener('click', () => {
             overlay.style.display = 'none';
             startSpotifyWithLikedSongs();
