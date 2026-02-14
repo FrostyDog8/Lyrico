@@ -5,7 +5,7 @@ The game can send anonymous usage events to **Google Analytics 4** so you can se
 ## Setup (one-time)
 
 1. Go to **[analytics.google.com](https://analytics.google.com)** and sign in with your Google account.
-2. Create a **GA4 property** for your site (e.g. "Lyrics Puzzle").
+2. Create a **GA4 property** for your site (e.g. "Lyrico").
 3. Get your **Measurement ID** (looks like `G-XXXXXXXXXX`) from Admin → Data Streams → your web stream.
 4. In **script.js**, set the constant at the top:
    ```js
@@ -43,5 +43,13 @@ To see how many game starts (entries) happened for each mode:
    - In the Events table, click **+** (Add dimension) or the column header and add **Event parameter** → **mode**. You'll see counts for `choose_song`, `surprise`, and `surprise_artist`.
 
 Alternatively, use **Explore** (left menu) → **Free form** → add **Event name** = `game_start` and **Dimensions** → **Event parameter** → **mode** to get a table or chart of entries per game mode.
+
+### Viewing a specific user's activity
+
+GA4 identifies each visitor by a **Client ID**. To see one user's stats and event timeline:
+
+1. In GA4 go to **Explore** (left menu) → **User exploration** (or create a new exploration and choose "User exploration" if available).
+2. You'll see a list of users (each row is one Client ID). Click a user to open their **Event timeline** – all events (game_start, song_complete, etc.) for that visit/session.
+3. Or use **Explore** → **Free form** → add the dimension **Client ID** (under "User" or in the dimension list). Add your metrics (e.g. Event count), then filter by a specific Client ID to see that user's activity.
 
 No server or process runs on your computer; the game only loads Google's script and sends events when players use it.

@@ -1,4 +1,4 @@
-# Lyrics Puzzle - Fill in the Lyrics Game
+# Lyrico - Fill in the Lyrics Game
 
 A fun web-based game where you guess song lyrics word by word! Type words to reveal lyrics as you play and fill in the blanks to complete the song.
 

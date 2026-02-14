@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Year Songs Viewer - Lyrico</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 10px;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 15px 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            height: calc(100vh - 20px);
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            color: #1f2937;
+            margin: 0 0 12px 0;
+            text-align: center;
+            font-size: 1.5em;
+        }
+        .year-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .year-selector label {
+            font-weight: 600;
+            color: #374151;
+            font-size: 1.1em;
+        }
+        .year-selector select {
+            padding: 12px 20px;
+            font-size: 1em;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            color: #1f2937;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 120px;
+        }
+        .year-selector select:hover {
+            border-color: #667eea;
+        }
+        .year-selector select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .year-selector button {
+            padding: 12px 24px;
+            font-size: 1em;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .year-selector button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .year-selector button:active {
+            transform: translateY(0);
+        }
+        .year-selector button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .info {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+        }
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-size: 1em;
+            margin: 20px 0;
+        }
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        .error {
+            text-align: center;
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        .songs-container {
+            flex: 1;
+            overflow: auto;
+            min-height: 0;
+        }
+        .songs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        .songs-table thead {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .songs-table th {
+            padding: 8px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .songs-table th:first-child {
+            width: 50px;
+            text-align: center;
+        }
+        .songs-table th:nth-child(2) {
+            width: 45%;
+        }
+        .songs-table th:nth-child(3) {
+            width: 45%;
+        }
+        .songs-table tbody tr {
+            border-bottom: 1px solid #f3f4f6;
+            transition: background 0.15s ease;
+        }
+        .songs-table tbody tr:hover {
+            background: #f9fafb;
+        }
+        .songs-table tbody tr:nth-child(even) {
+            background: #fafbfc;
+        }
+        .songs-table tbody tr:nth-child(even):hover {
+            background: #f3f4f6;
+        }
+        .songs-table td {
+            padding: 6px 12px;
+            vertical-align: middle;
+        }
+        .songs-table td:first-child {
+            text-align: center;
+            font-weight: 700;
+            color: #667eea;
+            font-size: 0.95em;
+        }
+        .song-title-cell {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .song-artist-cell {
+            color: #6b7280;
+        }
+        .stats {
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 2px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.85em;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Year Songs Viewer</h1>
+        
+        <div class="year-selector">
+            <label for="yearSelect">Select Year:</label>
+            <select id="yearSelect">
+                <!-- Will be populated by JavaScript -->
+            </select>
+            <button id="loadBtn">Load Songs</button>
+        </div>
+        
+        <div class="info" id="infoText">
+            Select a year and click "Load Songs" to see the top songs for that year.
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">Loading songs</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div class="songs-container">
+            <table id="songsTable" class="songs-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Song Title</th>
+                        <th>Artist</th>
+                    </tr>
+                </thead>
+                <tbody id="songsTableBody">
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="stats" class="stats" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Last.fm API (same key as main game). Get one at https://www.last.fm/api/account/create
+        const LASTFM_API_KEY = '072e57491a78cfaf62abffd5bf5429a4';
+
+        // Fetch one page of Last.fm tag.getTopTracks for a year
+        async function fetchLastFmTagTopTracksPage(year, page, limit) {
+            const params = new URLSearchParams({
+                method: 'tag.gettoptracks',
+                tag: String(year),
+                api_key: LASTFM_API_KEY,
+                format: 'json',
+                limit: String(limit || 100),
+                page: String(page || 1)
+            });
+            const url = `https://ws.audioscrobbler.com/2.0/?${params}`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`Last.fm HTTP ${res.status}`);
+            const proxy = await res.json();
+            const raw = proxy.contents;
+            const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if (data.error) throw new Error(data.message || 'Last.fm API error');
+            const tracks = data?.toptracks?.track ?? data?.tracks?.track ?? [];
+            return Array.isArray(tracks) ? tracks : [];
+        }
+
+        // Fetch top tracks for year from Last.fm, filtered; return up to maxTracks
+        async function fetchLastFmTopTracksByYear(year, maxTracks) {
+            const seen = new Set();
+            const out = [];
+            for (let page = 1; page <= 5; page++) {
+                const tracks = await fetchLastFmTagTopTracksPage(year, page, 100);
+                if (!tracks.length) break;
+                for (const t of tracks) {
+                    const title = (t.name || '').trim();
+                    const artist = (t.artist?.name ?? t.artist ?? '').trim() || 'Unknown';
+                    if (!title || !isOriginalVersion(title)) continue;
+                    if (!isLikelyEnglish(title) || !isLikelyEnglish(artist)) continue;
+                    const key = `${title.toLowerCase()}|${artist.toLowerCase()}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    const playcount = parseInt(t.playcount, 10) || 0;
+                    out.push({ title, artist, year: Number(year), playcount });
+                }
+                if (out.length >= maxTracks) break;
+            }
+            out.sort((a, b) => b.playcount - a.playcount);
+            return out.slice(0, maxTracks);
+        }
+
+        // Helper functions from main script
+        function isLikelyEnglish(text) {
+            if (!text) return false;
+            const nonLatin = /[^\x00-\x7F\u0080-\u00FF\u0100-\u017F]/;
+            if (nonLatin.test(text)) return false;
+            
+            const spanishWords = ['el', 'la', 'de', 'que', 'y', 'en', 'un', 'es', 'se', 'no', 'te', 'lo', 'le', 'da', 'su', 'por', 'son', 'con', 'las', 'del', 'los', 'una', 'esta', 'este', 'está', 'están', 'estas', 'estos'];
+            const words = text.toLowerCase().split(/\s+/);
+            let spanishCount = 0;
+            for (const word of words) {
+                if (spanishWords.includes(word.replace(/[^\w]/g, ''))) spanishCount++;
+            }
+            return spanishCount < 5;
+        }
+        
+        function isOriginalVersion(title) {
+            if (!title) return false;
+            const lower = title.toLowerCase();
+            const exclude = ['live', 'acoustic', 'remix', 'remastered', 'demo', 'cover', 'version', 'feat.', 'featuring'];
+            return !exclude.some(word => lower.includes(word));
+        }
+        
+        // Populate year selector
+        const yearSelect = document.getElementById('yearSelect');
+        const currentYear = new Date().getFullYear();
+        for (let year = 1960; year <= currentYear; year++) {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            if (year === currentYear) {
+                option.selected = true;
+            }
+            yearSelect.appendChild(option);
+        }
+        
+        // Load songs function
+        async function loadSongsForYear() {
+            const year = parseInt(yearSelect.value);
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const songsTable = document.getElementById('songsTable');
+            const songsTableBody = document.getElementById('songsTableBody');
+            const statsEl = document.getElementById('stats');
+            const infoText = document.getElementById('infoText');
+            const loadBtn = document.getElementById('loadBtn');
+            
+            // Determine songs per year
+            let songsPerYear;
+            if (year >= 1960 && year < 1980) {
+                songsPerYear = 4;
+            } else if (year >= 1980 && year < 2000) {
+                songsPerYear = 10;
+            } else {
+                songsPerYear = 15;
+            }
+            
+            // Show loading
+            loadingEl.style.display = 'block';
+            errorEl.style.display = 'none';
+            songsTable.style.display = 'none';
+            songsTableBody.innerHTML = '';
+            statsEl.style.display = 'none';
+            infoText.style.display = 'none';
+            loadBtn.disabled = true;
+            
+            try {
+                let finalSongs = [];
+                const seen = new Set();
+
+                // Try Last.fm first (tag = year), same limits as game
+                if (LASTFM_API_KEY && LASTFM_API_KEY.trim()) {
+                    try {
+                        const lastFmSongs = await fetchLastFmTopTracksByYear(year, songsPerYear);
+                        if (lastFmSongs.length >= songsPerYear) {
+                            finalSongs = lastFmSongs.slice(0, songsPerYear);
+                        }
+                    } catch (e) {
+                        console.warn('Last.fm failed, using iTunes:', e.message);
+                    }
+                }
+
+                // Fallback: iTunes with year-specific and generic terms
+                if (finalSongs.length < songsPerYear) {
+                    const allMatchingSongs = [];
+                    const yearTerms = [`${year} hit`, `best of ${year}`, `top ${year}`];
+                    const genericTerms = ['popular', 'hit', 'top', 'chart', 'best', 'music', 'song', 'single'];
+                    const searchQueries = [...yearTerms, ...genericTerms];
+
+                    for (const query of searchQueries) {
+                        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=200`;
+                        const res = await fetch(url);
+                        if (!res.ok) continue;
+
+                        const data = await res.json();
+                        if (!data.results || !data.results.length) continue;
+
+                        for (const r of data.results) {
+                            if (!r.releaseDate) continue;
+                            const releaseYear = new Date(r.releaseDate).getFullYear();
+                            if (releaseYear !== year) continue;
+
+                            if (!isOriginalVersion(r.trackName)) continue;
+                            const title = (r.trackName || '').trim();
+                            const artist = (r.artistName || '').trim() || 'Unknown';
+                            if (!title || !isLikelyEnglish(title) || !isLikelyEnglish(artist)) continue;
+
+                            const key = `${title.toLowerCase()}|${artist.toLowerCase()}`;
+                            if (seen.has(key)) continue;
+                            seen.add(key);
+
+                            allMatchingSongs.push({
+                                title,
+                                artist,
+                                year: releaseYear,
+                                queryIndex: searchQueries.indexOf(query),
+                                searchOrder: allMatchingSongs.length
+                            });
+                        }
+                    }
+
+                    allMatchingSongs.sort((a, b) => {
+                        if (a.queryIndex !== b.queryIndex) return a.queryIndex - b.queryIndex;
+                        return a.searchOrder - b.searchOrder;
+                    });
+
+                    finalSongs = allMatchingSongs.slice(0, songsPerYear);
+                }
+                
+                if (finalSongs.length === 0) {
+                    throw new Error('No eligible songs found for this year');
+                }
+                
+                // Display songs in table
+                songsTableBody.innerHTML = finalSongs.map((song, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td class="song-title-cell">${song.title}</td>
+                        <td class="song-artist-cell">${song.artist}</td>
+                    </tr>
+                `).join('');
+                
+                // Show table
+                songsTable.style.display = 'table';
+                
+                // Show stats
+                statsEl.textContent = `Showing ${finalSongs.length} of top ${songsPerYear} songs for ${year}`;
+                statsEl.style.display = 'block';
+                
+            } catch (e) {
+                errorEl.textContent = `Error: ${e.message}`;
+                errorEl.style.display = 'block';
+            } finally {
+                loadingEl.style.display = 'none';
+                loadBtn.disabled = false;
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('loadBtn').addEventListener('click', loadSongsForYear);
+        yearSelect.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                loadSongsForYear();
+            }
+        });
+        
+        // Load current year on page load
+        window.addEventListener('load', () => {
+            loadSongsForYear();
+        });
+    </script>
+</body>
+</html>
