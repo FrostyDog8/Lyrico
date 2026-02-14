@@ -55,9 +55,9 @@ onDomReady(() => {
     const wordInput = document.getElementById('wordInput');
     const playAgainBtn = document.getElementById('playAgainBtn');
     const devModeBtn = document.getElementById('devModeBtn');
-    const hasDevSecret = typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH;
+    const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
     if (devModeBtn) {
-        if (!hasDevSecret) {
+        if (!isLocal) {
             devModeBtn.style.display = 'none';
         } else {
             devModeBtn.addEventListener('click', toggleDevMode);
@@ -377,28 +377,8 @@ onDomReady(() => {
 });
 
 function toggleDevMode() {
-    if (devMode) {
-        devMode = false;
-        updateDevModeUI();
-        return;
-    }
-    const password = prompt('Dev mode password:');
-    if (password == null) return;
-    const hash = typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH;
-    if (!hash) {
-        return;
-    }
-    sha256Hex(password).then(hashed => {
-        if (hashed.toLowerCase() === String(hash).toLowerCase()) {
-            devMode = true;
-            updateDevModeUI();
-        }
-    });
-}
-
-function sha256Hex(str) {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
-        .then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''));
+    devMode = !devMode;
+    updateDevModeUI();
 }
 
 function updateDevModeUI() {
@@ -407,7 +387,7 @@ function updateDevModeUI() {
     const failedSongsDiv = document.getElementById('failedSongs');
     const failedSongsDivGame = document.getElementById('failedSongsGame');
     
-    if (devModeBtn && typeof window.DEV_MODE_PASSWORD_HASH !== 'undefined' && window.DEV_MODE_PASSWORD_HASH) {
+    if (devModeBtn) {
         if (devMode) {
             devModeBtn.classList.add('active');
             devModeBtn.textContent = '🔧 ON';
