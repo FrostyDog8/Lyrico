@@ -28,19 +28,20 @@
                 <div class="game-mode-card">
                     <div class="mode-icon">🎯</div>
                     <h3>Choose a Song</h3>
-                    <p class="mode-description">Pick any song you want to play. Enter the song name and start guessing!</p>
+                    <p class="mode-description">Know the song? Type its name and fill in the lyrics from memory. Great for your favorite tunes!</p>
                     <div class="game-mode-card-actions">
                         <div class="mode-input-group">
                             <input type="text" id="songInput" placeholder="e.g., Bohemian Rhapsody">
-                            <button id="startBtn" class="btn btn-primary">Start Game</button>
+                            <button id="startBtn" class="btn btn-primary">🎯 Start Game</button>
                         </div>
+                        <button id="helpSongBtn" class="btn-help" title="How does Choose a Song work?">?</button>
                     </div>
                 </div>
 
                 <div class="game-mode-card">
                     <div class="mode-icon">🎲</div>
                     <h3>Surprise Me</h3>
-                    <p class="mode-description">Get a random popular song and test your knowledge. The song name is hidden until you complete it!</p>
+                    <p class="mode-description">Jump in blind! We’ll pick a hit from the last decades—guess the lyrics and see if you can name that tune.</p>
                     <div class="game-mode-card-actions">
                         <button id="surpriseBtn" class="btn btn-secondary">🎲 Surprise Me!</button>
                         <button id="helpSurpriseBtn" class="btn-help" title="How does Surprise Me work?">?</button>
@@ -50,11 +51,11 @@
                 <div class="game-mode-card">
                     <div class="mode-icon">🎤</div>
                     <h3>Surprise by Artist</h3>
-                    <p class="mode-description">Get a random song from your favorite artist. Perfect for testing your knowledge of a specific artist!</p>
+                    <p class="mode-description">Pick an artist you love and we’ll choose a random song. How many of their lyrics can you nail?</p>
                     <div class="game-mode-card-actions">
                         <div class="mode-input-group">
                             <input type="text" id="artistInput" placeholder="e.g., Taylor Swift">
-                            <button id="surpriseByArtistBtn" class="btn btn-secondary">🎤 Random Song</button>
+                            <button id="surpriseByArtistBtn" class="btn btn-secondary">🎤 Shuffle & play</button>
                         </div>
                         <button id="helpArtistBtn" class="btn-help" title="How does Surprise by Artist work?">?</button>
                     </div>
@@ -63,7 +64,7 @@
                 <div class="game-mode-card" id="spotifyModeCard" style="display: none;">
                     <div class="mode-icon">🎧</div>
                     <h3>Play from Spotify</h3>
-                    <p class="mode-description">Connect your Spotify and pick a playlist (or Liked Songs). Play through it like Surprise mode—lyrics are fetched for each track.</p>
+                    <p class="mode-description">Link Spotify, pick a playlist or Liked Songs, and play through it one song at a time. Your music, your challenge!</p>
                     <div class="game-mode-card-actions">
                         <button id="spotifyConnectBtn" class="btn btn-spotify">🎧 Connect & pick playlist</button>
                         <button id="helpSpotifyBtn" class="btn-help" title="How does Play from Spotify work?">?</button>

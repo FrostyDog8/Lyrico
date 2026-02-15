@@ -497,7 +497,7 @@ onDomReady(() => {
         const surpriseBtn = document.getElementById('surpriseBtn');
         const surpriseByArtistBtn = document.getElementById('surpriseByArtistBtn');
         if (startBtn) {
-            startBtn.innerHTML = 'Start Game';
+            startBtn.innerHTML = '🎯 Start Game';
             startBtn.disabled = false;
         }
         if (surpriseBtn) {
@@ -505,7 +505,7 @@ onDomReady(() => {
             surpriseBtn.disabled = false;
         }
         if (surpriseByArtistBtn) {
-            surpriseByArtistBtn.innerHTML = '🎤 Random Song';
+            surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
             surpriseByArtistBtn.disabled = false;
         }
         });
@@ -539,6 +539,21 @@ onDomReady(() => {
             }
         });
     }
+    const helpSongBtn = document.getElementById('helpSongBtn');
+    if (helpSongBtn) {
+        helpSongBtn.addEventListener('click', () => {
+            showHelp('Choose a Song', `
+                <p><strong>Choose a Song</strong> lets you play any song you know by name.</p>
+                <h4>How it works:</h4>
+                <ul>
+                    <li>Type the song name (and artist if you want to be specific)</li>
+                    <li>Click "Start Game" to load the lyrics</li>
+                    <li>If several songs match, you'll pick one from a list</li>
+                </ul>
+                <p>Great for your favorite tunes or to challenge a friend with a specific track!</p>
+            `);
+        });
+    }
     if (helpSurpriseBtn) {
         helpSurpriseBtn.addEventListener('click', () => {
             showHelp('Surprise Me Mode', `
@@ -560,7 +575,7 @@ onDomReady(() => {
                 <p><strong>Surprise by Artist</strong> gives you random songs from a specific artist.</p>
                 <h4>How it works:</h4>
                 <ul>
-                    <li>Enter an artist name and click "Random Song"</li>
+                    <li>Enter an artist name and click "Shuffle & play"</li>
                     <li>You'll get a random song by that artist</li>
                     <li>The song title is hidden until you complete it</li>
                     <li>Use "Next Song" to get another song by the same artist</li>
@@ -662,7 +677,7 @@ onDomReady(() => {
             const surpriseBtn = document.getElementById('surpriseBtn');
             const surpriseByArtistBtn = document.getElementById('surpriseByArtistBtn');
             if (startBtn) {
-                startBtn.innerHTML = 'Start Game';
+                startBtn.innerHTML = '🎯 Start Game';
                 startBtn.disabled = false;
             }
             if (surpriseBtn) {
@@ -670,7 +685,7 @@ onDomReady(() => {
                 surpriseBtn.disabled = false;
             }
             if (surpriseByArtistBtn) {
-                surpriseByArtistBtn.innerHTML = '🎤 Random Song';
+                surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
                 surpriseByArtistBtn.disabled = false;
             }
         });
@@ -1487,7 +1502,7 @@ function applyPreloadedSong(song) {
     document.getElementById('gameArea').style.display = 'block';
     document.body.classList.add('in-game');
     updateFailedSongsDisplay(globalFailedSongs);
-    startBtn.innerHTML = 'Start Game';
+    startBtn.innerHTML = '🎯 Start Game';
     startBtn.disabled = false;
     if (surpriseBtn) {
         surpriseBtn.innerHTML = '🎲 Surprise Me!';
@@ -2063,7 +2078,7 @@ async function surpriseByArtist() {
         if (result.needArtistSelection) {
             songs = await showArtistSelection(result.artists, result.songsByArtist);
             if (songs == null) {
-                surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+                surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
                 surpriseByArtistBtn.disabled = false;
                 startBtn.disabled = false;
                 if (surpriseBtn) surpriseBtn.disabled = false;
@@ -2077,7 +2092,7 @@ async function surpriseByArtist() {
         }
     } catch (e) {
         showError('Could not find songs for that artist. Try another name.');
-        surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+        surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
         surpriseByArtistBtn.disabled = false;
         startBtn.disabled = false;
         if (surpriseBtn) surpriseBtn.disabled = false;
@@ -2086,7 +2101,7 @@ async function surpriseByArtist() {
 
     if (!songs.length) {
         showError(`No eligible songs found for "${artistName}". Try another artist.`);
-        surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+        surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
         surpriseByArtistBtn.disabled = false;
         startBtn.disabled = false;
         if (surpriseBtn) surpriseBtn.disabled = false;
@@ -2137,7 +2152,7 @@ async function surpriseByArtist() {
             
             await loadSong(chosen.title, chosen.artist, true, songYear);
             preloadNextArtistSong(); // start preloading more songs by this artist
-            surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+            surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
             surpriseByArtistBtn.disabled = false;
             startBtn.disabled = false;
             if (surpriseBtn) surpriseBtn.disabled = false;
@@ -2153,7 +2168,7 @@ async function surpriseByArtist() {
             await new Promise(r => setTimeout(r, 500));
         }
     }
-    surpriseByArtistBtn.innerHTML = '🎤 Random song by artist';
+    surpriseByArtistBtn.innerHTML = '🎤 Shuffle & play';
     surpriseByArtistBtn.disabled = false;
     startBtn.disabled = false;
     if (surpriseBtn) surpriseBtn.disabled = false;
@@ -2204,7 +2219,7 @@ async function startGame() {
             await loadSong(selectedSong.title, selectedSong.artist, false, null, null, null, false);
         } catch (loadErr) {
             showError(loadErr.message || 'Could not load this song. Please try another.');
-            startBtn.innerHTML = 'Start Game';
+            startBtn.innerHTML = '🎯 Start Game';
             startBtn.disabled = false;
             if (surpriseBtn) { surpriseBtn.innerHTML = '🎲 Surprise Me!'; surpriseBtn.disabled = false; }
             if (surpriseByArtistBtn) surpriseByArtistBtn.disabled = false;
@@ -2213,7 +2228,7 @@ async function startGame() {
 
     } catch (error) {
         showError(error.message || 'Failed to search for songs. Please try again.');
-        startBtn.innerHTML = 'Start Game';
+        startBtn.innerHTML = '🎯 Start Game';
         startBtn.disabled = false;
         if (surpriseBtn) {
             surpriseBtn.innerHTML = '🎲 Surprise Me!';
@@ -2277,7 +2292,7 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
         updateFailedSongsDisplay(globalFailedSongs);
 
         // Reset button states
-        startBtn.innerHTML = 'Start Game';
+        startBtn.innerHTML = '🎯 Start Game';
         startBtn.disabled = false;
         if (surpriseBtn) {
             surpriseBtn.innerHTML = '🎲 Surprise Me!';
@@ -2300,7 +2315,7 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
                 const errorMsg = error.message || 'Failed to fetch lyrics. Please try again.';
                 showError(errorMsg);
             }
-            startBtn.innerHTML = 'Start Game';
+            startBtn.innerHTML = '🎯 Start Game';
             startBtn.disabled = false;
             if (surpriseBtn) {
                 surpriseBtn.innerHTML = '🎲 Surprise Me!';
@@ -2537,7 +2552,7 @@ function showSongSelection(songs, query) {
     });
     
     songSelectionOverlay.style.display = 'flex';
-    startBtn.innerHTML = 'Start Game';
+    startBtn.innerHTML = '🎯 Start Game';
     startBtn.disabled = false;
     if (surpriseBtn) {
         surpriseBtn.innerHTML = '🎲 Surprise Me!';

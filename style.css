@@ -217,6 +217,10 @@ header h1 {
     gap: 12px;
     width: 100%;
 }
+/* Align main button with cards that have input+button (same visual baseline) */
+.game-mode-card-actions:not(:has(.mode-input-group)) {
+    padding-top: 56px;
+}
 
 /* Exact same size for all lobby main buttons (width and height) */
 .game-mode-card-actions .btn-primary,
@@ -752,6 +756,13 @@ header h1 {
 }
 .btn-spotify:active {
     transform: translateY(0);
+}
+/* Lobby: same size as other mode buttons */
+.game-mode-card-actions .btn-spotify {
+    padding: 0 16px;
+    font-size: 1em;
+    font-weight: 700;
+    box-sizing: border-box;
 }
 
 #surpriseBtn {
