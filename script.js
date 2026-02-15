@@ -60,8 +60,11 @@ function trackEvent(name, params) {
     window.gtag('event', name, params);
 }
 
-// Spotify (optional) – set Client ID from https://developer.spotify.com/dashboard ; add Redirect URI in app settings (e.g. your site origin or http://127.0.0.1:8080 for local)
-const SPOTIFY_CLIENT_ID = 'bd59563fe9e24de2826f2c575df7f508'; // leave empty to hide Spotify mode
+// Spotify (optional) – set Client ID from https://developer.spotify.com/dashboard ; add Redirect URI in app settings. Leave empty to hide from lobby (restore ID to re-enable).
+const SPOTIFY_CLIENT_ID = ''; // was 'bd59563fe9e24de2826f2c575df7f508'
+const SPOTIFY_CLIENT_ID_UNLOCKED = 'bd59563fe9e24de2826f2c575df7f508'; // used when secret code unlocks Spotify
+let spotifySecretUnlocked = false;
+function getSpotifyClientId() { return SPOTIFY_CLIENT_ID || (spotifySecretUnlocked ? SPOTIFY_CLIENT_ID_UNLOCKED : ''); }
 const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative user-library-read';
 const SPOTIFY_STORAGE_KEY = 'lf_spotify_token';
 const SPOTIFY_VERIFIER_KEY = 'lf_spotify_code_verifier';
@@ -97,7 +100,7 @@ function spotifyGenerateRandomString(length) {
 }
 
 function spotifyLogin() {
-    if (!SPOTIFY_CLIENT_ID) return;
+    if (!getSpotifyClientId()) return;
     const state = spotifyGenerateRandomString(32);
     const codeVerifier = spotifyGenerateRandomString(64);
     spotifySha256(codeVerifier).then((hashed) => {
@@ -109,7 +112,7 @@ function spotifyLogin() {
         const redirectUri = getSpotifyRedirectUri();
         const params = new URLSearchParams({
             response_type: 'code',
-            client_id: SPOTIFY_CLIENT_ID,
+            client_id: getSpotifyClientId(),
             scope: SPOTIFY_SCOPES,
             redirect_uri: redirectUri,
             state,
@@ -128,7 +131,7 @@ async function spotifyExchangeCode(code) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-            client_id: SPOTIFY_CLIENT_ID,
+            client_id: getSpotifyClientId(),
             grant_type: 'authorization_code',
             code,
             redirect_uri: redirectUri,
@@ -2182,6 +2185,17 @@ async function startGame() {
 
     if (!songName) {
         showError('Please enter a song name');
+        return;
+    }
+
+    // Secret code: "spotspot" unlocks Spotify mode and restores 4-column layout
+    if (songName === 'spotspot') {
+        spotifySecretUnlocked = true;
+        document.body.classList.add('spotify-unlocked');
+        const spotifyModeCard = document.getElementById('spotifyModeCard');
+        if (spotifyModeCard) spotifyModeCard.style.display = 'block';
+        songInput.value = '';
+        errorMessage.classList.remove('show');
         return;
     }
 

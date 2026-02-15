@@ -37,8 +37,14 @@ body:not(.in-game) #gameSetup {
     flex-direction: column;
     min-height: 0;
 }
-body:not(.in-game) #gameSetup .game-modes {
+body:not(.in-game) #gameSetup .game-setup-main {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+body:not(.in-game) #gameSetup .game-setup-main .game-modes {
+    flex: 0 0 auto;
     align-content: start;
 }
 /* lf:od */
@@ -151,19 +157,31 @@ header h1 {
 
 .game-modes {
     display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 8px 0 0 0;
+}
+@media (max-width: 900px) {
+    .game-modes {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+/* Secret code "spotspot" unlocks Spotify: restore 4-column layout */
+body.spotify-unlocked .game-modes {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 20px;
     max-width: 1400px;
-    margin: 0 auto;
-    padding: 8px 0;
 }
 @media (max-width: 1000px) {
-    .game-modes {
+    body.spotify-unlocked .game-modes {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 @media (max-width: 600px) {
-    .game-modes {
+    body.spotify-unlocked .game-modes {
         grid-template-columns: 1fr;
     }
 }
@@ -373,7 +391,8 @@ header h1 {
 
 .error-message {
     color: #e74c3c;
-    margin-top: 15px;
+    margin-top: 0;
+    margin-bottom: 0;
     font-weight: 500;
     display: none;
 }
