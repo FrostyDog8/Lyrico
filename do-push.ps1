@@ -1,4 +1,4 @@
 cd "c:\Users\Omer Dabby\Desktop\Lyrics Figure"
 git add -A
-git commit -m "Fix character validation for Latin Extended characters and update placeholder song"
+git commit -m "Optimize mobile in-game buttons: more compact layout and better organization"
 git push
