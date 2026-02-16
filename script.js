@@ -63,6 +63,7 @@ function trackEvent(name, params) {
 // Spotify (optional) – set Client ID from https://developer.spotify.com/dashboard ; add Redirect URI in app settings. Leave empty to hide from lobby (restore ID to re-enable).
 const SPOTIFY_CLIENT_ID = ''; // was 'bd59563fe9e24de2826f2c575df7f508'
 const SPOTIFY_CLIENT_ID_UNLOCKED = 'bd59563fe9e24de2826f2c575df7f508'; // used when secret code unlocks Spotify
+const SPOTIFY_UNLOCKED_KEY = 'lf_spotify_unlocked'; // persist so unlock survives OAuth redirect / refresh
 let spotifySecretUnlocked = false;
 function getSpotifyClientId() { return SPOTIFY_CLIENT_ID || (spotifySecretUnlocked ? SPOTIFY_CLIENT_ID_UNLOCKED : ''); }
 const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative user-library-read';
@@ -301,13 +302,21 @@ onDomReady(() => {
     initAnalytics();
     initLobbyButtons();
 
-    // Spotify: show card only if configured; handle OAuth callback
+    // Restore Spotify secret unlock from storage (so it survives OAuth redirect / refresh)
+    try {
+        if (localStorage.getItem(SPOTIFY_UNLOCKED_KEY) === '1') {
+            spotifySecretUnlocked = true;
+            document.body.classList.add('spotify-unlocked');
+        }
+    } catch (_) {}
+
+    // Spotify: show card only if configured or unlocked; handle OAuth callback
     const spotifyModeCard = document.getElementById('spotifyModeCard');
-    if (spotifyModeCard) spotifyModeCard.style.display = SPOTIFY_CLIENT_ID ? 'block' : 'none';
+    if (spotifyModeCard) spotifyModeCard.style.display = getSpotifyClientId() ? 'block' : 'none';
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
-    if (SPOTIFY_CLIENT_ID && code && state) {
+    if (getSpotifyClientId() && code && state) {
         const savedState = sessionStorage.getItem(SPOTIFY_STATE_KEY);
         if (savedState === state) {
             spotifyExchangeCode(code).then(() => {
@@ -2195,6 +2204,7 @@ async function startGame() {
     // Secret code: "spotspot" unlocks Spotify mode and restores 4-column layout
     if (songName === 'spotspot') {
         spotifySecretUnlocked = true;
+        try { localStorage.setItem(SPOTIFY_UNLOCKED_KEY, '1'); } catch (_) {}
         document.body.classList.add('spotify-unlocked');
         const spotifyModeCard = document.getElementById('spotifyModeCard');
         if (spotifyModeCard) spotifyModeCard.style.display = 'block';
