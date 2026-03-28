@@ -171,6 +171,7 @@ Works best in modern browsers (Chrome, Firefox, Safari, Edge) that support:
 
 ## Version History
 
+- **v1.7**: Surprise Me uses the static song database only (no API fallback); more permissive English-alphabet filter for titles/artists; brief blue highlight on words as they are revealed
 - **v1.6**: Developer attribution footer and contact email (lyrico.app@gmail.com); in-game layout so only the lyrics box scrolls (no page scroll); main screen tightened so it fits without scrolling; year and hidden attribution updates
 - **v1.5**: Hint button (reveal random word, orange styling); end-game messages by completion % (Perfection! to encouraging); last-revealed word in center (guess=purple, hint=orange); Next Song pulse animation; songs list updated
 - **v1.4**: Artist mode preload priority; surprise preload continues when artist queue is full and when returning to lobby; songs data refreshed

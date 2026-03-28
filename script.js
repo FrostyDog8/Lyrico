@@ -269,6 +269,7 @@ let gameState = {
     requestedArtistName: '', // The original artist name requested by user (for searching)
     artistModeDisplayName: '', // Resolved artist name for banner (e.g. "Imagine Dragons" when user searched "imagine drag"), no collab
     hintRevealedIndices: new Set(), // Indices of word slots revealed by hint (not counted as "found" in summary)
+    lastRevealedIndices: [], // Indices of words that were just revealed (for highlighting)
     // Spotify mode: when set, Next Song pulls from this playlist
     spotifyPlaylistName: '',
     spotifyPlaylistId: null, // null = Liked Songs
@@ -1071,32 +1072,27 @@ async function getRandomPopularSongOld() {
     return { title: chosen.title, artist: chosen.artist, year: chosen.year || null };
 }
 
-/** Pick a random song from the static database (songs-by-year.json). Falls back to API if DB unavailable (e.g. when opening index.html via file://). */
+/** Pick a random song from the static database (songs-by-year.json). ONLY uses songs from the static database - no API fallback. */
 async function getRandomPopularSong() {
-    try {
-        const db = await loadStaticSongsDb();
-        if (!db || db.length === 0) throw new Error('Empty database');
-        let pool = db.filter(s => !triedSongsInSession.has(`${s.title.toLowerCase()}_${s.artist.toLowerCase()}`));
-        if (pool.length === 0) {
-            triedSongsInSession.clear();
-            pool = db;
-        }
-        const chosen = pool[Math.floor(Math.random() * pool.length)];
-        triedSongsInSession.add(`${chosen.title.toLowerCase()}_${chosen.artist.toLowerCase()}`);
-        chartSource = 'static-db';
-        return {
-            title: chosen.title,
-            artist: chosen.artist,
-            year: chosen.year,
-            rank: null,
-            topK: null
-        };
-    } catch (e) {
-        console.warn('Static song DB unavailable, using API fallback:', e.message || e);
-        const song = await getRandomPopularSongOptimized();
-        if (!chartSource) chartSource = 'itunes-optimized';
-        return song;
+    const db = await loadStaticSongsDb();
+    if (!db || db.length === 0) {
+        throw new Error('Song database is empty or unavailable. Please ensure songs-by-year.json is available.');
     }
+    let pool = db.filter(s => !triedSongsInSession.has(`${s.title.toLowerCase()}_${s.artist.toLowerCase()}`));
+    if (pool.length === 0) {
+        triedSongsInSession.clear();
+        pool = db;
+    }
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    triedSongsInSession.add(`${chosen.title.toLowerCase()}_${chosen.artist.toLowerCase()}`);
+    chartSource = 'static-db';
+    return {
+        title: chosen.title,
+        artist: chosen.artist,
+        year: chosen.year,
+        rank: null,
+        topK: null
+    };
 }
 
 /** Optimized version: Select random year weighted by song counts, then fetch only that year's songs. Retries with new year if fetch fails. */
@@ -2408,7 +2404,9 @@ function isHebrew(text) {
     return /[\u0590-\u05FF]/.test(text);
 }
 
-/** True if text uses only the English (Latin) alphabet. Accented letters (é, ñ, ü) are allowed because they normalize to a-z (e.g. Spanish "niño" → "nino"). Rejects scripts like Cyrillic, CJK, Arabic, Hebrew. */
+/** True if text uses only the English (Latin) alphabet. Accented letters (é, ñ, ü) are allowed because they normalize to a-z (e.g. Spanish "niño" → "nino"). Rejects scripts like Cyrillic, CJK, Arabic, Hebrew. 
+ * VERY PERMISSIVE: Only rejects the most obvious non-Latin scripts. Allows everything else.
+ * User preference: "Better to allow some bad songs than to ban good songs" */
 function usesOnlyEnglishAlphabet(text) {
     if (!text || typeof text !== 'string') return true;
     try {
@@ -2416,7 +2414,8 @@ function usesOnlyEnglishAlphabet(text) {
         // This converts é → e, ñ → n, etc.
         const normalized = text.normalize('NFD').replace(/\p{M}/gu, '');
         
-        for (const char of normalized) {
+        for (let i = 0; i < normalized.length; i++) {
+            const char = normalized[i];
             // Only check Unicode letters (Category L) - ignore punctuation, digits, whitespace
             if (/\p{L}/u.test(char)) {
                 const code = char.charCodeAt(0);
@@ -2424,40 +2423,52 @@ function usesOnlyEnglishAlphabet(text) {
                 if (/[a-zA-Z]/.test(char)) {
                     continue;
                 }
-                // Allow Latin Extended ranges (should normalize but be permissive)
-                // Latin Extended-A: U+0100-U+017F, Latin Extended-B: U+0180-U+024F
-                // Latin Extended Additional: U+1E00-U+1EFF, Latin Extended-C: U+2C60-U+2C7F
-                // Latin Extended-D: U+A720-U+A7FF, Latin Extended-E: U+AB30-U+AB6F
-                if ((code >= 0x0100 && code <= 0x024F) ||
-                    (code >= 0x1E00 && code <= 0x1EFF) ||
-                    (code >= 0x2C60 && code <= 0x2C7F) ||
-                    (code >= 0xA720 && code <= 0xA7FF) ||
-                    (code >= 0xAB30 && code <= 0xAB6F)) {
-                    continue; // Allow Latin Extended characters
+                // Allow ALL Latin Extended ranges and related blocks
+                // This includes: Latin Extended-A/B/C/D/E, Latin Extended Additional, IPA Extensions, etc.
+                if ((code >= 0x0100 && code <= 0x017F) ||   // Latin Extended-A
+                    (code >= 0x0180 && code <= 0x024F) ||   // Latin Extended-B
+                    (code >= 0x1E00 && code <= 0x1EFF) ||   // Latin Extended Additional
+                    (code >= 0x2C60 && code <= 0x2C7F) ||   // Latin Extended-C
+                    (code >= 0xA720 && code <= 0xA7FF) ||   // Latin Extended-D
+                    (code >= 0xAB30 && code <= 0xAB6F) ||   // Latin Extended-E
+                    (code >= 0x0250 && code <= 0x02AF) ||   // IPA Extensions (phonetic symbols)
+                    (code >= 0x1D00 && code <= 0x1D7F) ||   // Phonetic Extensions
+                    (code >= 0x1D80 && code <= 0x1DBF) ||   // Phonetic Extensions Supplement
+                    (code >= 0x2070 && code <= 0x209F)) {   // Superscripts and Subscripts (may contain letters)
+                    continue; // Allow all Latin-related and phonetic characters
                 }
-                // Reject known non-Latin scripts (Cyrillic, Greek, CJK, Arabic, Hebrew, etc.)
-                // Check for common non-Latin script ranges
-                if ((code >= 0x0370 && code <= 0x03FF) ||   // Greek
-                    (code >= 0x0400 && code <= 0x04FF) ||   // Cyrillic
-                    (code >= 0x0530 && code <= 0x058F) ||   // Armenian
-                    (code >= 0x0590 && code <= 0x05FF) ||   // Hebrew
-                    (code >= 0x0600 && code <= 0x06FF) ||   // Arabic
-                    (code >= 0x0900 && code <= 0x097F) ||   // Devanagari
-                    (code >= 0x3040 && code <= 0x309F) ||   // Hiragana
-                    (code >= 0x30A0 && code <= 0x30FF) ||   // Katakana
-                    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
-                    (code >= 0xAC00 && code <= 0xD7AF)) {   // Hangul
+                // ONLY reject the most obvious non-Latin scripts
+                // Reduced list - only reject scripts that are clearly not Latin-based
+                const isNonLatinScript = (
+                    (code >= 0x0400 && code <= 0x04FF) ||   // Cyrillic (most common non-Latin)
+                    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs (Chinese/Japanese/Korean)
+                    (code >= 0x3040 && code <= 0x309F) ||   // Hiragana (Japanese)
+                    (code >= 0x30A0 && code <= 0x30FF) ||   // Katakana (Japanese)
+                    (code >= 0xAC00 && code <= 0xD7AF)      // Hangul (Korean)
+                );
+                
+                if (isNonLatinScript) {
+                    // Debug: log the rejection in console
+                    if (typeof console !== 'undefined' && console.warn) {
+                        console.warn(`Rejected non-Latin script: "${char}" (U+${code.toString(16).toUpperCase().padStart(4, '0')}) at position ${i}`);
+                        const start = Math.max(0, i - 20);
+                        const end = Math.min(normalized.length, i + 20);
+                        console.warn(`Context: "${normalized.substring(start, end)}"`);
+                    }
                     return false;
                 }
-                // For any other Unicode letter not in the above ranges, be permissive
-                // (might be a rare Latin variant or a character that should have normalized)
+                
+                // VERY PERMISSIVE: Allow everything else
+                // This includes: Greek (might be used in English), Arabic numerals in some contexts,
+                // mathematical symbols, IPA, rare Latin variants, etc.
+                // Better to allow a few non-English songs than to ban good English songs
+                continue;
             }
         }
         return true;
     } catch (e) {
-        // If normalization fails (shouldn't happen in modern browsers), be permissive
-        // Fall back to checking if text contains only ASCII printable + common Unicode punctuation
-        return /^[\x20-\x7E\u00A0-\u00FF\u2013-\u201E\u2026]*$/.test(text);
+        // If normalization fails, be very permissive - allow everything
+        return true;
     }
 }
 
@@ -2897,6 +2908,7 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
     gameState.foundWords = new Set();
     gameState.userGuessedWords = new Set();
     gameState.hintRevealedIndices = new Set();
+    gameState.lastRevealedIndices = [];
     gameState.totalWords = actualWordCount;
     gameState.foundCount = 0;
     gameState.songTitle = title;
@@ -3283,6 +3295,15 @@ function toggleRevealLyrics() {
 }
 
 function revealAllLyrics() {
+    // Clear previous highlight
+    gameState.lastRevealedIndices.forEach(index => {
+        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        if (slot) {
+            slot.classList.remove('just-revealed');
+        }
+    });
+    gameState.lastRevealedIndices = [];
+    
     // Reveal all words in the lyrics
     gameState.words.forEach((wordObj, index) => {
         if (!wordObj.isNewline) {
@@ -3838,6 +3859,18 @@ function checkWord(inputWord, shouldClearInput = false) {
 }
 
 function revealWord(normalizedWord, indices, isHint = false) {
+    // Remove highlight from previously revealed words
+    gameState.lastRevealedIndices.forEach(index => {
+        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        if (slot) {
+            slot.classList.remove('just-revealed');
+        }
+    });
+    
+    // Clear the previous highlight list
+    gameState.lastRevealedIndices = [];
+    
+    // Reveal the new words and add highlight
     indices.forEach(index => {
         const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
         if (slot && !slot.classList.contains('found')) {
@@ -3845,6 +3878,8 @@ function revealWord(normalizedWord, indices, isHint = false) {
             slot.textContent = wordObj.word;
             slot.classList.remove('empty');
             slot.classList.add('found');
+            slot.classList.add('just-revealed'); // Highlight newly revealed word
+            gameState.lastRevealedIndices.push(index); // Track for next reveal
             if (isHint) {
                 slot.classList.add('hint-revealed');
                 gameState.hintRevealedIndices.add(index);
