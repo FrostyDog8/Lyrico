@@ -235,6 +235,23 @@ body.spotify-unlocked .game-modes {
     gap: 12px;
     width: 100%;
 }
+
+/* Secret code "popo": Polarsteps link under Choose a Song (session-only) */
+.polarsteps-secret-wrap {
+    margin-top: 14px;
+    width: 100%;
+    text-align: center;
+    font-size: 0.95em;
+}
+.polarsteps-secret-wrap a {
+    color: #2563eb;
+    font-weight: 600;
+    text-decoration: underline;
+    word-break: break-all;
+}
+.polarsteps-secret-wrap a:hover {
+    color: #1d4ed8;
+}
 /* Align main button with cards that have input+button (same visual baseline) */
 .game-mode-card-actions:not(:has(.mode-input-group)) {
     padding-top: 56px;

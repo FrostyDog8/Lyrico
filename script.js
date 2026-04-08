@@ -72,6 +72,21 @@ const SPOTIFY_VERIFIER_KEY = 'lf_spotify_code_verifier';
 const SPOTIFY_STATE_KEY = 'lf_spotify_state';
 const _lf = 'od-lyrico'; // internal build id
 
+/** Secret code "popo" shows this link below the song field (session-only; hidden when leaving the lobby). */
+const POLARSTEPS_SECRET_URL = 'https://www.polarsteps.com/OmerDabby/21357188-road-trip?s=ef43ea9e-96f9-404b-9881-1f6bca9b74b1';
+
+function hidePolarstepsSecretLink() {
+    const wrap = document.getElementById('polarstepsSecretWrap');
+    if (wrap) wrap.style.display = 'none';
+}
+
+function showPolarstepsSecretLink() {
+    const wrap = document.getElementById('polarstepsSecretWrap');
+    const a = document.getElementById('polarstepsSecretLink');
+    if (a) a.href = POLARSTEPS_SECRET_URL;
+    if (wrap) wrap.style.display = 'block';
+}
+
 function getSpotifyRedirectUri() {
     if (typeof window === 'undefined' || !window.location) return 'http://127.0.0.1:8080';
     // lf:od
@@ -273,8 +288,17 @@ let gameState = {
     // Spotify mode: when set, Next Song pulls from this playlist
     spotifyPlaylistName: '',
     spotifyPlaylistId: null, // null = Liked Songs
-    spotifyTracks: [] // { title, artist }[]
+    spotifyTracks: [], // { title, artist }[]
+    /** @type {Array<HTMLElement|null>} Same length as words; DOM slot or null for newlines */
+    wordSlotEls: null,
+    /** @type {Map<string, number[]>} normalized word -> word indices (for fast guesses) */
+    indicesByNormalized: null,
+    /** Indices of words that are "oh/ooh/ah/uh" family — avoids scanning all lyrics each guess */
+    ohVariantIndices: null
 };
+
+/** Prevents synchronous re-entrant `input` handling if assigning `value` fires another `input` (browser-dependent). */
+let wordInputHandlerLock = false;
 
 // Initialize the game – attach lobby buttons so they always work
 function initLobbyButtons() {
@@ -382,19 +406,25 @@ onDomReady(() => {
     // Track input as user types and auto-check for matches
     if (wordInput) {
         wordInput.addEventListener('input', (e) => {
+        if (wordInputHandlerLock) return;
         const inputValue = e.target.value;
         
         if (!inputValue || inputValue.length === 0) return;
         
         // Split by spaces to handle multiple words
-        const words = inputValue.trim().split(/\s+/).filter(w => w.length > 0);
+        let words = inputValue.trim().split(/\s+/).filter(w => w.length > 0);
         
         if (words.length === 0) {
             e.target.value = '';
             return;
         }
+
+        const overflow = words.length > WORD_INPUT_MAX_CHECK_PER_EVENT
+            ? words.slice(WORD_INPUT_MAX_CHECK_PER_EVENT)
+            : [];
+        words = words.slice(0, WORD_INPUT_MAX_CHECK_PER_EVENT);
         
-        // Check each word individually
+        // Check each word individually (capped per event so a huge paste cannot freeze the tab)
         const remainingWords = [];
         let foundAny = false;
         
@@ -413,8 +443,13 @@ onDomReady(() => {
         
         // Update input field - keep only words that weren't found
         if (foundAny) {
-            const newValue = remainingWords.join(' ');
-            e.target.value = newValue;
+            const newValue = [...remainingWords, ...overflow].join(' ');
+            wordInputHandlerLock = true;
+            try {
+                e.target.value = newValue;
+            } finally {
+                wordInputHandlerLock = false;
+            }
         }
         });
     }
@@ -499,6 +534,7 @@ onDomReady(() => {
         document.body.classList.remove('in-game');
         document.getElementById('songInput').value = '';
         document.getElementById('songInput').focus();
+        hidePolarstepsSecretLink();
         
         // Reset error message (but keep failed songs visible)
         document.getElementById('errorMessage').classList.remove('show');
@@ -1510,6 +1546,7 @@ function applyPreloadedSong(song) {
     initializeGame(song.lyrics, song.title, song.artist, true, song.year || null, song.rank || null, song.topK || null);
     const songSelectionOverlay = document.getElementById('songSelectionOverlay');
     if (songSelectionOverlay) songSelectionOverlay.style.display = 'none';
+    hidePolarstepsSecretLink();
     document.getElementById('gameSetup').style.display = 'none';
     document.getElementById('gameArea').style.display = 'block';
     document.body.classList.add('in-game');
@@ -1741,6 +1778,7 @@ function openSpotifyPlaylistPicker() {
     const overlay = document.getElementById('spotifyPlaylistOverlay');
     const listEl = document.getElementById('spotifyPlaylistList');
     if (!overlay || !listEl) return;
+    hidePolarstepsSecretLink();
     listEl.innerHTML = '<div class="song-list-loading">Loading playlists…</div>';
     overlay.style.display = 'flex';
     const SHOW_PLAYLIST_SONG_COUNT = false; // set true to show song count per playlist (currently unreliable)
@@ -1852,6 +1890,7 @@ async function pickAndLoadFirstSpotifySong() {
         if (!usesOnlyEnglishAlphabet(lyrics) && !isHebrew(lyrics)) throw new Error('Lyrics use unsupported characters.');
         gameState.surpriseArtistName = '';
         initializeGame(lyrics, track.title, track.artist, true, null, null, null, isHebrew(lyrics));
+        hidePolarstepsSecretLink();
         document.getElementById('gameSetup').style.display = 'none';
         document.getElementById('gameArea').style.display = 'block';
         document.body.classList.add('in-game');
@@ -1910,6 +1949,7 @@ async function surpriseMe() {
     const surpriseBtn = document.getElementById('surpriseBtn');
     const startBtn = document.getElementById('startBtn');
     
+    hidePolarstepsSecretLink();
     // Hide error and selection
     errorMessage.classList.remove('show');
     document.getElementById('songSelection').style.display = 'none';
@@ -2064,6 +2104,7 @@ async function surpriseByArtist() {
     const startBtn = document.getElementById('startBtn');
     const surpriseBtn = document.getElementById('surpriseBtn');
 
+    hidePolarstepsSecretLink();
     errorMessage.classList.remove('show');
     const songSelectionOverlay = document.getElementById('songSelectionOverlay');
     const artistSelectionOverlay = document.getElementById('artistSelectionOverlay');
@@ -2199,6 +2240,7 @@ async function startGame() {
 
     // Secret code: "spotspot" unlocks Spotify mode and restores 4-column layout
     if (songName === 'spotspot') {
+        hidePolarstepsSecretLink();
         spotifySecretUnlocked = true;
         try { localStorage.setItem(SPOTIFY_UNLOCKED_KEY, '1'); } catch (_) {}
         document.body.classList.add('spotify-unlocked');
@@ -2209,6 +2251,17 @@ async function startGame() {
         errorMessage.classList.remove('show');
         return;
     }
+
+    // Secret code: "popo" shows Polarsteps trip link (session-only; cleared when leaving lobby)
+    if (songName === 'popo') {
+        showPolarstepsSecretLink();
+        songInput.value = '';
+        errorMessage.classList.remove('show');
+        trackEvent('polarsteps_secret_shown', {});
+        return;
+    }
+
+    hidePolarstepsSecretLink();
 
     // Clear failed songs list when starting new search
     globalFailedSongs = [];
@@ -2311,6 +2364,7 @@ async function loadSong(title, artist, isSurprise = false, year = null, rank = n
         if (songSelectionOverlay) songSelectionOverlay.style.display = 'none';
 
         // Show game area
+        hidePolarstepsSecretLink();
         document.getElementById('gameSetup').style.display = 'none';
         document.getElementById('gameArea').style.display = 'block';
         document.body.classList.add('in-game');
@@ -2754,6 +2808,11 @@ async function getSongFromiTunes(title, artist) {
 
 const LYRICS_MIN_LENGTH = 50;
 const LYRICS_REQUEST_TIMEOUT_MS = 12000;
+/** YouTube lookup runs mid-game when the song title is shown; keep work bounded so the tab never locks up on multi‑MB pages. */
+const YOUTUBE_FETCH_TIMEOUT_MS = 10000;
+const YOUTUBE_HTML_SCAN_MAX = 900000; // first ~0.9MB is enough for the first result videoId
+/** Avoid main-thread stalls when the paste buffer has thousands of “words”. */
+const WORD_INPUT_MAX_CHECK_PER_EVENT = 48;
 
 /** Race a promise against a timeout. Rejects with "Request timed out" after ms. */
 function withTimeout(promise, ms) {
@@ -2905,6 +2964,19 @@ function initializeGame(lyrics, title, artist, isSurprise = false, year = null, 
     // Store game state
     gameState.lyrics = cleanedLyrics.split('\n');
     gameState.words = words;
+    gameState.indicesByNormalized = new Map();
+    gameState.wordSlotEls = new Array(words.length).fill(null);
+    gameState.ohVariantIndices = [];
+    words.forEach((wordObj, index) => {
+        if (wordObj.isNewline) return;
+        const n = wordObj.normalized;
+        if (!gameState.indicesByNormalized.has(n)) gameState.indicesByNormalized.set(n, []);
+        gameState.indicesByNormalized.get(n).push(index);
+        const wordOh = normalizeForOhMatch(n);
+        if (OH_VARIANTS.has(n) || OH_VARIANTS.has(wordOh)) {
+            gameState.ohVariantIndices.push(index);
+        }
+    });
     gameState.foundWords = new Set();
     gameState.userGuessedWords = new Set();
     gameState.hintRevealedIndices = new Set();
@@ -3249,6 +3321,7 @@ function createLyricsTable(words) {
             slot.dataset.index = wordObj.originalIndex;
             slot.dataset.normalized = wordObj.normalized;
             slot.textContent = '';
+            if (gameState.wordSlotEls) gameState.wordSlotEls[wordObj.originalIndex] = slot;
             lineContainer.appendChild(slot);
         });
         
@@ -3266,6 +3339,7 @@ function createLyricsTable(words) {
             slot.dataset.index = wordObj.originalIndex;
             slot.dataset.normalized = wordObj.normalized;
             slot.textContent = '';
+            if (gameState.wordSlotEls) gameState.wordSlotEls[wordObj.originalIndex] = slot;
             lineContainer.appendChild(slot);
         });
         
@@ -3295,9 +3369,10 @@ function toggleRevealLyrics() {
 }
 
 function revealAllLyrics() {
+    const slots = gameState.wordSlotEls;
     // Clear previous highlight
     gameState.lastRevealedIndices.forEach(index => {
-        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        const slot = slots && slots[index];
         if (slot) {
             slot.classList.remove('just-revealed');
         }
@@ -3307,7 +3382,7 @@ function revealAllLyrics() {
     // Reveal all words in the lyrics
     gameState.words.forEach((wordObj, index) => {
         if (!wordObj.isNewline) {
-            const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+            const slot = slots && slots[index];
             if (slot && !slot.classList.contains('found')) {
                 slot.textContent = wordObj.word;
                 slot.classList.remove('empty');
@@ -3323,10 +3398,11 @@ function revealAllLyrics() {
 }
 
 function hideLyrics() {
+    const slots = gameState.wordSlotEls;
     // Hide words that weren't guessed by the user
     gameState.words.forEach((wordObj, index) => { // od
         if (!wordObj.isNewline) {
-            const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+            const slot = slots && slots[index];
             if (slot) {
                 // Only hide if it wasn't user-guessed
                 if (!gameState.userGuessedWords.has(wordObj.normalized)) {
@@ -3449,9 +3525,10 @@ function handleGiveUp() {
     revealAllLyrics();
     
     // Mark missed words (not user-guessed) with special styling; don't mark hint-revealed as missed
+    const slots = gameState.wordSlotEls;
     gameState.words.forEach((wordObj, index) => {
         if (!wordObj.isNewline) {
-            const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+            const slot = slots && slots[index];
             if (slot && slot.classList.contains('found')) {
                 if (!userGuessedBefore.has(wordObj.normalized) && !slot.classList.contains('hint-revealed')) {
                     slot.classList.add('give-up-missed');
@@ -3556,94 +3633,23 @@ async function getYouTubeVideoUrl(title, artist) {
         const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
         const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(searchUrl)}`;
         
-        const response = await fetch(proxyUrl);
+        const response = await withTimeout(fetch(proxyUrl), YOUTUBE_FETCH_TIMEOUT_MS);
         if (!response.ok) {
             throw new Error('Failed to fetch YouTube results');
         }
         
         const html = await response.text();
-        
-        // YouTube stores video data in JSON embedded in the page
-        // Look for the ytInitialData object which contains search results
+        // Never regex/parse the full document: pages are multi‑MB and JSON regex + JSON.parse can freeze the tab.
+        const scan = html.length <= YOUTUBE_HTML_SCAN_MAX ? html : html.slice(0, YOUTUBE_HTML_SCAN_MAX);
         let videoId = null;
-        
-        // Pattern 1: Extract from ytInitialData JSON (most reliable)
-        const ytInitialDataMatch = html.match(/var ytInitialData = ({.+?});/);
-        if (ytInitialDataMatch) {
-            try {
-                const data = JSON.parse(ytInitialDataMatch[1]);
-                // Navigate through the JSON structure to find first video
-                if (data.contents && data.contents.twoColumnSearchResultsRenderer) {
-                    const contents = data.contents.twoColumnSearchResultsRenderer.primaryContents;
-                    if (contents && contents.sectionListRenderer) {
-                        const sections = contents.sectionListRenderer.contents;
-                        for (const section of sections) {
-                            if (section.itemSectionRenderer && section.itemSectionRenderer.contents) {
-                                for (const item of section.itemSectionRenderer.contents) {
-                                    if (item.videoRenderer && item.videoRenderer.videoId) {
-                                        videoId = item.videoRenderer.videoId;
-                                        break;
-                                    }
-                                }
-                                if (videoId) break;
-                            }
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log('Failed to parse ytInitialData:', e);
-            }
-        }
-        
-        // Pattern 2: Look for videoId in window["ytInitialData"]
+
+        // First quoted videoId in the head of the document (single match — no /g over megabytes)
+        const quoted = scan.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+        if (quoted && quoted[1]) videoId = quoted[1];
+
         if (!videoId) {
-            const windowDataMatch = html.match(/window\["ytInitialData"\] = ({.+?});/);
-            if (windowDataMatch) {
-                try {
-                    const data = JSON.parse(windowDataMatch[1]);
-                    if (data.contents && data.contents.twoColumnSearchResultsRenderer) {
-                        const contents = data.contents.twoColumnSearchResultsRenderer.primaryContents;
-                        if (contents && contents.sectionListRenderer) {
-                            const sections = contents.sectionListRenderer.contents;
-                            for (const section of sections) {
-                                if (section.itemSectionRenderer && section.itemSectionRenderer.contents) {
-                                    for (const item of section.itemSectionRenderer.contents) {
-                                        if (item.videoRenderer && item.videoRenderer.videoId) {
-                                            videoId = item.videoRenderer.videoId;
-                                            break;
-                                        }
-                                    }
-                                    if (videoId) break;
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.log('Failed to parse window ytInitialData:', e);
-                }
-            }
-        }
-        
-        // Pattern 3: Simple regex fallback - look for first videoId in quotes
-        if (!videoId) {
-            const videoIdMatches = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g);
-            if (videoIdMatches && videoIdMatches.length > 0) {
-                const firstMatch = videoIdMatches[0].match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-                if (firstMatch && firstMatch[1]) {
-                    videoId = firstMatch[1];
-                }
-            }
-        }
-        
-        // Pattern 4: Look for /watch?v= pattern (last resort)
-        if (!videoId) {
-            const watchMatches = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/g);
-            if (watchMatches && watchMatches.length > 0) {
-                const firstMatch = watchMatches[0].match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
-                if (firstMatch && firstMatch[1]) {
-                    videoId = firstMatch[1];
-                }
-            }
+            const watch = scan.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+            if (watch && watch[1]) videoId = watch[1];
         }
         
         if (videoId) {
@@ -3778,13 +3784,14 @@ function checkWord(inputWord, shouldClearInput = false) {
     const inputOh = normalizeForOhMatch(normalizedInput);
     if (OH_VARIANTS.has(normalizedInput) || OH_VARIANTS.has(inputOh)) {
         const ohMatches = [];
-        gameState.words.forEach((wordObj, index) => {
-            const wordOh = normalizeForOhMatch(wordObj.normalized);
-            const isOhVariant = OH_VARIANTS.has(wordObj.normalized) || OH_VARIANTS.has(wordOh);
-            if (!wordObj.isNewline && isOhVariant && !gameState.foundWords.has(wordObj.normalized)) {
-                ohMatches.push(index);
+        const ohIdx = gameState.ohVariantIndices;
+        if (ohIdx && ohIdx.length) {
+            for (let k = 0; k < ohIdx.length; k++) {
+                const index = ohIdx[k];
+                const wordObj = gameState.words[index];
+                if (!gameState.foundWords.has(wordObj.normalized)) ohMatches.push(index);
             }
-        });
+        }
         if (ohMatches.length > 0) {
             ohMatches.forEach(index => gameState.foundWords.add(gameState.words[index].normalized));
             gameState.userGuessedWords.add(normalizedInput);
@@ -3816,13 +3823,17 @@ function checkWord(inputWord, shouldClearInput = false) {
         return false;
     }
     
-    // Find all occurrences of this word (exact match)
+    // Find all occurrences of this word (exact match) — O(1) map lookup + unrevealed slots only
+    const bucket = gameState.indicesByNormalized && gameState.indicesByNormalized.get(normalizedInput);
+    const slots = gameState.wordSlotEls;
     const matches = [];
-    gameState.words.forEach((wordObj, index) => {
-        if (!wordObj.isNewline && wordObj.normalized === normalizedInput) {
-            matches.push(index);
+    if (bucket && slots) {
+        for (let k = 0; k < bucket.length; k++) {
+            const index = bucket[k];
+            const slot = slots[index];
+            if (slot && !slot.classList.contains('found')) matches.push(index);
         }
-    });
+    }
     
     if (matches.length > 0) {
         // Word found! Reveal all occurrences
@@ -3859,9 +3870,10 @@ function checkWord(inputWord, shouldClearInput = false) {
 }
 
 function revealWord(normalizedWord, indices, isHint = false) {
+    const slots = gameState.wordSlotEls;
     // Remove highlight from previously revealed words
     gameState.lastRevealedIndices.forEach(index => {
-        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        const slot = slots && slots[index];
         if (slot) {
             slot.classList.remove('just-revealed');
         }
@@ -3872,7 +3884,7 @@ function revealWord(normalizedWord, indices, isHint = false) {
     
     // Reveal the new words and add highlight
     indices.forEach(index => {
-        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        const slot = slots && slots[index];
         if (slot && !slot.classList.contains('found')) {
             const wordObj = gameState.words[index];
             slot.textContent = wordObj.word;
@@ -3915,10 +3927,11 @@ function updateLastRevealedDisplay(displayWord, count, isHint) {
 
 function useHint() {
     if (!gameState.words || gameState.words.length === 0 || gameState.lyricsRevealed) return;
+    const slots = gameState.wordSlotEls;
     const unrevealedByNormalized = new Map();
     gameState.words.forEach((wordObj, index) => {
         if (wordObj.isNewline) return;
-        const slot = document.querySelector(`.word-slot[data-index="${index}"]`);
+        const slot = slots && slots[index];
         if (!slot || slot.classList.contains('found')) return;
         const norm = wordObj.normalized;
         if (!unrevealedByNormalized.has(norm)) unrevealedByNormalized.set(norm, []);
